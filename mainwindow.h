@@ -26,6 +26,7 @@
 #include <QVariantMap>
 #include <QEvent>
 #include <QCloseEvent>
+#include <QNetworkReply>
 
 namespace Ui {
 class MainWindow;
@@ -52,7 +53,7 @@ private slots:
   void onOpenBrowser(const QUrl &url);
   void onCloseBrowser(void);
   void getUserTimeline(void);
-  void gotUserTimeline(void);
+  void gotUserTimeline(QNetworkReply*);
   void onLogout(void);
   void onLogin(void);
 

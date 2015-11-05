@@ -45,6 +45,7 @@ public:
     : oauth(new O1Twitter(parent))
     , store(new O2SettingsStore(O2_ENCRYPTION_KEY))
     , settings(QSettings::IniFormat, QSettings::UserScope, AppCompanyName, AppName)
+    , reply(Q_NULLPTR)
     , NAM(parent)
       /*
        * From the Qt docs: "QStandardPaths::DataLocation returns the
@@ -77,6 +78,7 @@ public:
   O2SettingsStore *store;
   QSettings settings;
   QNetworkAccessManager NAM;
+  QNetworkReply *reply;
   QString tweetFilepath;
   QString tweetFilename;
   QString badTweetFilename;
@@ -132,8 +134,6 @@ MainWindow::MainWindow(QWidget *parent)
     d->lastId = qMax(d->badTweets.toVariant().toList().first().toMap()["id"].toLongLong(), d->lastId);
   if (!d->goodTweets.toVariant().toList().isEmpty())
     d->lastId = qMax(d->goodTweets.toVariant().toList().first().toMap()["id"].toLongLong(), d->lastId);
-  qDebug() << "lastId =" << d->lastId;
-
 
   QObject::connect(d->oauth, SIGNAL(linkedChanged()), SLOT(onLinkedChanged()));
   QObject::connect(d->oauth, SIGNAL(linkingFailed()), SLOT(onLinkingFailed()));
@@ -142,6 +142,8 @@ MainWindow::MainWindow(QWidget *parent)
   QObject::connect(d->oauth, SIGNAL(closeBrowser()), SLOT(onCloseBrowser()));
   QObject::connect(ui->actionExit, SIGNAL(triggered(bool)), SLOT(close()));
   QObject::connect(ui->actionRefresh, SIGNAL(triggered(bool)), SLOT(getUserTimeline()));
+
+  QObject::connect(&d->NAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotUserTimeline(QNetworkReply*)));
 
   ui->tableWidget->verticalHeader()->hide();
 
@@ -205,14 +207,14 @@ void MainWindow::onLinkingSucceeded(void)
 
 void MainWindow::onOpenBrowser(const QUrl &url)
 {
-  qDebug() << "MainWindow::onOpenBrowser()" << url;
+  ui->statusBar->showMessage(tr("Opening browser: %1").arg(url.toString()), 3000);
   QDesktopServices::openUrl(url);
 }
 
 
 void MainWindow::onCloseBrowser(void)
 {
-  qDebug() << "MainWindow::onCloseBrowser()";
+  ui->statusBar->showMessage(tr("Closing browser"), 3000);
 }
 
 
@@ -221,7 +223,7 @@ QJsonDocument MainWindow::mergeTweets(const QJsonDocument &storedJson, const QJs
   Q_D(MainWindow);
   const QList<QVariant> &storedList = storedJson.toVariant().toList();
   const QList<QVariant> &currentList = currentJson.toVariant().toList();
-  qDebug() << currentList.size() << "new entries since id" << d->lastId;
+  ui->statusBar->showMessage(tr("%1 new entries since id %2").arg(currentList.size()).arg(d->lastId), 3000);
 
   auto idComparator = [](const QVariant &a, const QVariant &b) {
     return a.toMap()["id"].toLongLong() > b.toMap()["id"].toLongLong();
@@ -232,7 +234,6 @@ QJsonDocument MainWindow::mergeTweets(const QJsonDocument &storedJson, const QJs
     QList<QVariant>::const_iterator idx;
     idx = qBinaryFind(storedList.constBegin(), storedList.constEnd(), post, idComparator);
     if (idx == storedList.end()) {
-      qDebug().nospace() << "Added post #" << post.toMap()["id"].toLongLong();
       result << post;
     }
   }
@@ -241,13 +242,11 @@ QJsonDocument MainWindow::mergeTweets(const QJsonDocument &storedJson, const QJs
 }
 
 
-void MainWindow::gotUserTimeline(void)
+void MainWindow::gotUserTimeline(QNetworkReply *reply)
 {
   Q_D(MainWindow);
-  QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
   if (reply->error() != QNetworkReply::NoError) {
-    qDebug() << "ERROR:" << reply->errorString();
-    qDebug() << reply->readAll();
+    ui->statusBar->showMessage(tr("Error: %1").arg(reply->errorString()));
   }
   else {
     QJsonDocument currentTweets = QJsonDocument::fromJson(reply->readAll());
@@ -264,7 +263,7 @@ void MainWindow::gotUserTimeline(void)
     qDebug() << "total number of tweets:" << posts.count();
     int row = 0;
     foreach(QVariant p, posts) {
-      QVariantMap post = p.toMap();
+      const QVariantMap &post = p.toMap();
       QTableWidgetItem *itemId = new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong()));
       QTableWidgetItem *itemCreatedAt = new QTableWidgetItem(post["created_at"].toString());
       QTableWidgetItem *itemText = new QTableWidgetItem(post["text"].toString());
@@ -305,11 +304,10 @@ void MainWindow::getUserTimeline(void)
     reqParams << O1RequestParameter("trim_user", "true");
     QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
-    QNetworkReply *reply = requestor->get(request, reqParams);
-    connect(reply, SIGNAL(finished()), this, SLOT(gotUserTimeline()));
+    d->reply = requestor->get(request, reqParams);
   }
   else {
-    qWarning() << "Application is not linked to Twitter!";
+    ui->statusBar->showMessage(tr("Application is not linked to Twitter."));
   }
 }
 
