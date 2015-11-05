@@ -94,7 +94,6 @@ void MainWindow::onLinkingFailed(void)
 void MainWindow::onLinkingSucceeded(void)
 {
   Q_D(MainWindow);
-  qDebug() << "MainWindow::onLinkingSucceeded()";
   O1Twitter* o1t = qobject_cast<O1Twitter *>(sender());
   d->extraTokens = o1t->extraTokens();
   if (!d->extraTokens.isEmpty()) {
@@ -126,7 +125,7 @@ void MainWindow::getUserTimelineDone(void)
   if (reply->error() != QNetworkReply::NoError) {
     qDebug() << "ERROR:" << reply->errorString();
   } else {
-    qDebug() << "content:" << reply->readAll();
+    ui->plainTextEdit->setPlainText(reply->readAll());
   }
 }
 
@@ -138,7 +137,7 @@ void MainWindow::getUserTimeline(void)
     QNetworkAccessManager* manager = new QNetworkAccessManager(this);
     O1Twitter* o1 = d->o1;
     O1Requestor* requestor = new O1Requestor(manager, o1, this);
-    QList<O1RequestParameter> reqParams = QList<O1RequestParameter>();
+    QList<O1RequestParameter> reqParams;
     QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/user_timeline.json"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
     QNetworkReply *reply = requestor->get(request, reqParams);
