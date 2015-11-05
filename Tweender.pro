@@ -13,20 +13,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+QT       += core gui network
+
+include(Tweenderific.pri)
+DEFINES += \
+  TWEENDERIFIC_VERSION=\\\"$${TWEENDER_VERSION}\\\"
 
 include(PRIVATE.pri)
 DEFINES += \
-  TWEENDER_VERSION=\\\"$${TWEENDER_VERSION}\\\" \
   MY_CLIENT_KEY=\\\"$${MY_CLIENT_KEY}\\\" \
   MY_CLIENT_SECRET=\\\"$${MY_CLIENT_SECRET}\\\"
-
-QT       += core gui network
 
 include(3rdparty/oauth/src.pri)
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
-TARGET = Tweender
+TARGET = Tweenderific
 TEMPLATE = app
 
 INCLUDEPATH += 3rdparty/oauth

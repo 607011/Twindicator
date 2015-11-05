@@ -23,6 +23,7 @@
 
 #include <QMainWindow>
 #include <QUrl>
+#include <QVariantMap>
 
 namespace Ui {
 class MainWindow;
@@ -44,7 +45,7 @@ private slots:
   void onLinkingSucceeded(void);
   void onOpenBrowser(const QUrl &url);
   void onCloseBrowser(void);
-
+  void getUserTimelineDonw(void);
 
 private:
   Ui::MainWindow *ui;
@@ -52,6 +53,9 @@ private:
   QScopedPointer<MainWindowPrivate> d_ptr;
   Q_DECLARE_PRIVATE(MainWindow)
   Q_DISABLE_COPY(MainWindow)
+
+private: // methods
+  void getUserTimeline();
 };
 
 #endif // __MAINWINDOW_H_

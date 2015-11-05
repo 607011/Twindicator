@@ -19,11 +19,18 @@
 
 
 #include <QDebug>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QDesktopServices>
+
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
 #include "o1twitter.h"
 #include "o1requestor.h"
+#include "o2globals.h"
+#include "o2settingsstore.h"
+
 
 class MainWindowPrivate
 {
@@ -35,7 +42,9 @@ public:
   { /* ... */ }
 
   O1Twitter *o1;
+  QVariantMap extraTokens;
 };
+
 
 MainWindow::MainWindow(QWidget *parent)
   : QMainWindow(parent)
@@ -47,12 +56,17 @@ MainWindow::MainWindow(QWidget *parent)
 
   d->o1->setClientId(MY_CLIENT_KEY);
   d->o1->setClientSecret(MY_CLIENT_SECRET);
-  d->o1->setAccessTokenUrl();
+  d->o1->setLocalPort(44444);
+
   connect(d->o1, SIGNAL(linkedChanged()), SLOT(onLinkedChanged()));
   connect(d->o1, SIGNAL(linkingFailed()), SLOT(onLinkingFailed()));
   connect(d->o1, SIGNAL(linkingSucceeded()), SLOT(onLinkingSucceeded()));
   connect(d->o1, SIGNAL(openBrowser(QUrl)),SLOT(onOpenBrowser(QUrl)));
   connect(d->o1, SIGNAL(closeBrowser()), SLOT(onCloseBrowser()));
+
+  O2SettingsStore *store = new O2SettingsStore(O2_ENCRYPTION_KEY);
+  store->setGroupKey("twitter");
+  d->o1->setStore(store);
 
   d->o1->link();
 }
@@ -79,17 +93,68 @@ void MainWindow::onLinkingFailed(void)
 
 void MainWindow::onLinkingSucceeded(void)
 {
+  Q_D(MainWindow);
   qDebug() << "MainWindow::onLinkingSucceeded()";
+  O1Twitter* o1t = qobject_cast<O1Twitter *>(sender());
+  d->extraTokens = o1t->extraTokens();
+  if (!d->extraTokens.isEmpty()) {
+    qDebug() << "Extra tokens in response:";
+    foreach (QString key, d->extraTokens.keys()) {
+      qDebug() << "\t" << key << ":" << d->extraTokens.value(key).toString();
+    }
+  }
+  getUserTimeline();
 }
 
 
 void MainWindow::onOpenBrowser(const QUrl &url)
 {
   qDebug() << "MainWindow::onOpenBrowser()" << url;
+  QDesktopServices::openUrl(url);
 }
 
 
 void MainWindow::onCloseBrowser(void)
 {
   qDebug() << "MainWindow::onCloseBrowser()";
+}
+
+
+void MainWindow::getUserTimelineDonw(void)
+{
+  QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+  if (reply->error() != QNetworkReply::NoError) {
+      qDebug() << "ERROR:" << reply->errorString();
+      qDebug() << "content:" << reply->readAll();
+  } else {
+      qDebug() << "Tweet posted sucessfully!";
+  }
+}
+
+
+void MainWindow::getUserTimeline(void)
+{
+  Q_D(MainWindow);
+//  if (!d->o1->linked()) {
+//    qWarning() << "Application is not linked to Twitter!";
+//    return;
+//  }
+
+  QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+  O1Twitter* o1 = d->o1;
+  O1Requestor* requestor = new O1Requestor(manager, o1, this);
+
+  QList<O1RequestParameter> reqParams = QList<O1RequestParameter>();
+  reqParams << O1RequestParameter("screen_name", "ctSESAM");
+  reqParams << O1RequestParameter("count", "10");
+
+  QUrl url = QUrl("https://api.twitter.com/1.1/statuses/user_timeline.json");
+  QNetworkRequest request(url);
+  request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
+
+  QNetworkReply *reply = requestor->get(request, reqParams);
+
+
+
+  connect(reply, SIGNAL(finished()), this, SLOT(getUserTimelineDonw()));
 }
