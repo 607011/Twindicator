@@ -24,7 +24,7 @@ DEFINES += \
   MY_CLIENT_KEY=\\\"$${MY_CLIENT_KEY}\\\" \
   MY_CLIENT_SECRET=\\\"$${MY_CLIENT_SECRET}\\\"
 
-include(3rdparty/oauth/src.pri)
+include(3rdparty/oauth/oauth.pri)
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
