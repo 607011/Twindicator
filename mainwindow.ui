@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
-    <height>300</height>
+    <width>692</width>
+    <height>474</height>
    </rect>
   </property>
   <property name="mouseTracking">
@@ -21,7 +21,7 @@
     <item>
      <layout class="QFormLayout" name="formLayout">
       <property name="bottomMargin">
-       <number>6</number>
+       <number>0</number>
       </property>
       <item row="0" column="0">
        <widget class="QLabel" name="label">
@@ -54,20 +54,94 @@
      </layout>
     </item>
     <item>
+     <widget class="QTextEdit" name="tweetTextEdit">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>150</height>
+       </size>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="likePushButton">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>44</width>
+          <height>44</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Like</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="dislikePushButton">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>44</width>
+          <height>44</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Dislike</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
      <widget class="QTableWidget" name="tableWidget">
       <column>
        <property name="text">
-        <string>text</string>
+        <string>Tweet</string>
        </property>
       </column>
       <column>
        <property name="text">
-        <string>created_at</string>
+        <string>Created</string>
        </property>
       </column>
       <column>
        <property name="text">
-        <string>id</string>
+        <string>ID</string>
        </property>
       </column>
      </widget>
@@ -79,7 +153,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>400</width>
+     <width>692</width>
      <height>21</height>
     </rect>
    </property>
@@ -87,8 +161,8 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionLogin"/>
-    <addaction name="actionLogout"/>
+    <addaction name="actionRefresh"/>
+    <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
    <addaction name="menuFile"/>
@@ -121,6 +195,14 @@
   <action name="actionExit">
    <property name="text">
     <string>Exit</string>
+   </property>
+  </action>
+  <action name="actionRefresh">
+   <property name="text">
+    <string>Refresh</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
    </property>
   </action>
  </widget>

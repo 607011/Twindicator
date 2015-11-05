@@ -82,6 +82,8 @@ public:
   QString badTweetFilename;
   QString goodTweetFilename;
   QJsonDocument storedTweets;
+  QJsonDocument badTweets;
+  QJsonDocument goodTweets;
   qlonglong lastId;
 };
 
@@ -98,12 +100,40 @@ MainWindow::MainWindow(QWidget *parent)
   d->badTweetFilename = d->tweetFilepath + "/bad_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
   d->goodTweetFilename = d->tweetFilepath + "/good_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
 
-  QDir().mkpath(d->tweetFilepath);
+  bool ok;
+
+  ok = QDir().mkpath(d->tweetFilepath);
+
   QFile tweetFile(d->tweetFilename);
-  tweetFile.open(QIODevice::ReadOnly);
-  d->storedTweets = QJsonDocument::fromJson(tweetFile.readAll());
-  tweetFile.close();
-  d->lastId = d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong();
+  ok = tweetFile.open(QIODevice::ReadOnly);
+  if (ok) {
+    d->storedTweets = QJsonDocument::fromJson(tweetFile.readAll());
+    tweetFile.close();
+  }
+
+  QFile badTweetsFile(d->badTweetFilename);
+  ok = badTweetsFile.open(QIODevice::ReadOnly);
+  if (ok) {
+    d->badTweets = QJsonDocument::fromJson(badTweetsFile.readAll());
+    badTweetsFile.close();
+  }
+
+  QFile goodTweets(d->goodTweetFilename);
+  ok = goodTweets.open(QIODevice::ReadOnly);
+  if (ok) {
+    d->goodTweets = QJsonDocument::fromJson(goodTweets.readAll());
+    goodTweets.close();
+  }
+
+  d->lastId = 0;
+  if (!d->storedTweets.toVariant().toList().isEmpty())
+    d->lastId = qMax(d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong(), d->lastId);
+  if (!d->badTweets.toVariant().toList().isEmpty())
+    d->lastId = qMax(d->badTweets.toVariant().toList().first().toMap()["id"].toLongLong(), d->lastId);
+  if (!d->goodTweets.toVariant().toList().isEmpty())
+    d->lastId = qMax(d->goodTweets.toVariant().toList().first().toMap()["id"].toLongLong(), d->lastId);
+  qDebug() << "lastId =" << d->lastId;
+
 
   QObject::connect(d->oauth, SIGNAL(linkedChanged()), SLOT(onLinkedChanged()));
   QObject::connect(d->oauth, SIGNAL(linkingFailed()), SLOT(onLinkingFailed()));
@@ -111,11 +141,9 @@ MainWindow::MainWindow(QWidget *parent)
   QObject::connect(d->oauth, SIGNAL(openBrowser(QUrl)), SLOT(onOpenBrowser(QUrl)));
   QObject::connect(d->oauth, SIGNAL(closeBrowser()), SLOT(onCloseBrowser()));
   QObject::connect(ui->actionExit, SIGNAL(triggered(bool)), SLOT(close()));
-  QObject::connect(ui->actionLogout, SIGNAL(triggered(bool)), SLOT(onLogout()));
+  QObject::connect(ui->actionRefresh, SIGNAL(triggered(bool)), SLOT(getUserTimeline()));
 
   ui->tableWidget->verticalHeader()->hide();
-  QObject::connect(ui->tableWidget, SIGNAL(cellClicked(int,int)), SLOT(onCellPressed(int,int)));
-  ui->tableWidget->installEventFilter(this);
 
   restoreSettings();
 
@@ -137,18 +165,6 @@ void MainWindow::closeEvent(QCloseEvent*)
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
-  switch (event->type()) {
-  case QEvent::MouseButtonPress:
-  {
-    QMouseEvent *mouseEvent = reinterpret_cast<QMouseEvent*>(event);
-    qDebug() << mouseEvent->pos();
-    if (obj->objectName() == ui->tableWidget->objectName()) {
-    }
-    break;
-  }
-  default:
-    break;
-  }
   return QObject::eventFilter(obj, event);
 }
 
@@ -176,18 +192,10 @@ void MainWindow::onLinkingSucceeded(void)
     d->settings.sync();
   }
   if (d->oauth->linked()) {
-    QObject::connect(ui->actionLogout, SIGNAL(triggered(bool)), this, SLOT(onLogout()));
-    QObject::disconnect(ui->actionLogin, SIGNAL(triggered(bool)), this, SLOT(onLogin()));
-    ui->actionLogout->setEnabled(true);
-    ui->actionLogin->setEnabled(false);
     ui->screenNameLineEdit->setText(d->settings.value("twitter/screenName").toString());
     ui->userIdLineEdit->setText(d->settings.value("twitter/userId").toString());
   }
   else {
-    QObject::disconnect(ui->actionLogout, SIGNAL(triggered(bool)), this, SLOT(onLogout()));
-    QObject::connect(ui->actionLogin, SIGNAL(triggered(bool)), this, SLOT(onLogin()));
-    ui->actionLogout->setEnabled(false);
-    ui->actionLogin->setEnabled(true);
     ui->screenNameLineEdit->setText(QString());
     ui->userIdLineEdit->setText(QString());
   }
@@ -244,7 +252,7 @@ void MainWindow::gotUserTimeline(void)
   else {
     QJsonDocument currentTweets = QJsonDocument::fromJson(reply->readAll());
     d->storedTweets = mergeTweets(d->storedTweets, currentTweets);
-    d->lastId = d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong();
+    d->lastId = d->storedTweets.toVariant().toList().isEmpty() ? 0 : d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong();
 
     QFile tweetFile(d->tweetFilename);
     tweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
@@ -270,12 +278,6 @@ void MainWindow::gotUserTimeline(void)
 }
 
 
-void MainWindow::onCellPressed(int row, int column)
-{
-  qDebug() << row << column;
-}
-
-
 void MainWindow::onLogout(void)
 {
   Q_D(MainWindow);
@@ -296,7 +298,10 @@ void MainWindow::getUserTimeline(void)
   if (d->oauth->linked()) {
     O1Requestor *requestor = new O1Requestor(&d->NAM, d->oauth, this);
     QList<O1RequestParameter> reqParams;
-    reqParams << O1RequestParameter("since_id", QString::number(d->lastId).toLatin1());
+    if (d->lastId > 0)
+      reqParams << O1RequestParameter("since_id", QString::number(d->lastId).toLatin1());
+    else
+      reqParams << O1RequestParameter("count", "200");
     reqParams << O1RequestParameter("trim_user", "true");
     QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);

@@ -53,7 +53,6 @@ private slots:
   void onCloseBrowser(void);
   void getUserTimeline(void);
   void gotUserTimeline(void);
-  void onCellPressed(int row, int column);
   void onLogout(void);
   void onLogin(void);
 
