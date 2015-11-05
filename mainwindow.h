@@ -51,7 +51,8 @@ private slots:
   void onLinkingSucceeded(void);
   void onOpenBrowser(const QUrl &url);
   void onCloseBrowser(void);
-  void getUserTimelineDone(void);
+  void getUserTimeline(void);
+  void gotUserTimeline(void);
   void onCellPressed(int row, int column);
   void onLogout(void);
   void onLogin(void);
@@ -64,7 +65,6 @@ private:
   Q_DISABLE_COPY(MainWindow)
 
 private: // methods
-  void getUserTimeline(void);
   void saveSettings(void);
   void restoreSettings(void);
   QJsonDocument mergeTweets(const QJsonDocument &a, const QJsonDocument &b);

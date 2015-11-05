@@ -113,6 +113,7 @@ MainWindow::MainWindow(QWidget *parent)
   QObject::connect(ui->actionExit, SIGNAL(triggered(bool)), SLOT(close()));
   QObject::connect(ui->actionLogout, SIGNAL(triggered(bool)), SLOT(onLogout()));
 
+  ui->tableWidget->verticalHeader()->hide();
   QObject::connect(ui->tableWidget, SIGNAL(cellClicked(int,int)), SLOT(onCellPressed(int,int)));
   ui->tableWidget->installEventFilter(this);
 
@@ -232,10 +233,9 @@ QJsonDocument MainWindow::mergeTweets(const QJsonDocument &storedJson, const QJs
 }
 
 
-void MainWindow::getUserTimelineDone(void)
+void MainWindow::gotUserTimeline(void)
 {
   Q_D(MainWindow);
-
   QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
   if (reply->error() != QNetworkReply::NoError) {
     qDebug() << "ERROR:" << reply->errorString();
@@ -244,6 +244,7 @@ void MainWindow::getUserTimelineDone(void)
   else {
     QJsonDocument currentTweets = QJsonDocument::fromJson(reply->readAll());
     d->storedTweets = mergeTweets(d->storedTweets, currentTweets);
+    d->lastId = d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong();
 
     QFile tweetFile(d->tweetFilename);
     tweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
@@ -265,7 +266,6 @@ void MainWindow::getUserTimelineDone(void)
       ++row;
     }
     ui->tableWidget->resizeColumnToContents(0);
-    ui->tableWidget->verticalHeader()->hide();
   }
 }
 
@@ -301,7 +301,7 @@ void MainWindow::getUserTimeline(void)
     QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
     QNetworkReply *reply = requestor->get(request, reqParams);
-    connect(reply, SIGNAL(finished()), this, SLOT(getUserTimelineDone()));
+    connect(reply, SIGNAL(finished()), this, SLOT(gotUserTimeline()));
   }
   else {
     qWarning() << "Application is not linked to Twitter!";
