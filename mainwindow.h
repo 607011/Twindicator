@@ -24,6 +24,8 @@
 #include <QMainWindow>
 #include <QUrl>
 #include <QVariantMap>
+#include <QEvent>
+#include <QCloseEvent>
 
 namespace Ui {
 class MainWindow;
@@ -39,6 +41,10 @@ public:
   explicit MainWindow(QWidget *parent = Q_NULLPTR);
   ~MainWindow();
 
+protected:
+  void closeEvent(QCloseEvent*);
+  bool eventFilter(QObject *obj, QEvent *event);
+
 private slots:
   void onLinkedChanged(void);
   void onLinkingFailed(void);
@@ -46,6 +52,9 @@ private slots:
   void onOpenBrowser(const QUrl &url);
   void onCloseBrowser(void);
   void getUserTimelineDone(void);
+  void onCellPressed(int row, int column);
+  void onLogout(void);
+  void onLogin(void);
 
 private:
   Ui::MainWindow *ui;
@@ -55,7 +64,10 @@ private:
   Q_DISABLE_COPY(MainWindow)
 
 private: // methods
-  void getUserTimeline();
+  void getUserTimeline(void);
+  void saveSettings(void);
+  void restoreSettings(void);
+  QJsonDocument mergeTweets(const QJsonDocument &a, const QJsonDocument &b);
 };
 
 #endif // __MAINWINDOW_H_

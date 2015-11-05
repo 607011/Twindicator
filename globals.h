@@ -17,16 +17,18 @@
 
 */
 
-#include "globals.h"
-#include "mainwindow.h"
-#include <QApplication>
+#ifndef __GLOBALS_H_
+#define __GLOBALS_H_
 
-int main(int argc, char *argv[])
-{
-  QApplication a(argc, argv);
-  QCoreApplication::setOrganizationName(AppCompanyName);
-  QCoreApplication::setApplicationName(AppName);
-  MainWindow w;
-  w.show();
-  return a.exec();
-}
+#include <QString>
+
+extern const QString AppCompanyName;
+extern const QString AppCompanyDomain;
+extern const QString AppName;
+extern const QString AppVersion;
+extern const QString AppURL;
+extern const QString AppAuthor;
+extern const QString AppAuthorMail;
+
+#endif // __GLOBALS_H_
+

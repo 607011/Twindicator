@@ -18,15 +18,11 @@
 */
 
 #include "globals.h"
-#include "mainwindow.h"
-#include <QApplication>
 
-int main(int argc, char *argv[])
-{
-  QApplication a(argc, argv);
-  QCoreApplication::setOrganizationName(AppCompanyName);
-  QCoreApplication::setApplicationName(AppName);
-  MainWindow w;
-  w.show();
-  return a.exec();
-}
+const QString AppCompanyName = "ct";
+const QString AppCompanyDomain = "http://www.ct.de/";
+const QString AppName = "Tweenderific";
+const QString AppVersion = TWEENDERIFIC_VERSION;
+const QString AppURL = "https://github.com/ola-ct/Tweenderific";
+const QString AppAuthor = "Oliver Lau";
+const QString AppAuthorMail = "ola@ct.de";

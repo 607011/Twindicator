@@ -13,7 +13,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-QT       += core gui network
+TARGET = Tweenderific
+TEMPLATE = app
+QT       += core gui network widgets
 
 include(Tweenderific.pri)
 DEFINES += \
@@ -22,21 +24,20 @@ DEFINES += \
 include(PRIVATE.pri)
 DEFINES += \
   MY_CLIENT_KEY=\\\"$${MY_CLIENT_KEY}\\\" \
-  MY_CLIENT_SECRET=\\\"$${MY_CLIENT_SECRET}\\\"
+  MY_CLIENT_SECRET=\\\"$${MY_CLIENT_SECRET}\\\" \
+  MY_USERNAME=\\\"$${MY_USERNAME}\\\" \
+  MY_PASSWORD=\\\"$${MY_PASSWORD}\\\"
 
-include(3rdparty/oauth/oauth.pri)
-
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
-
-TARGET = Tweenderific
-TEMPLATE = app
+include(../o2/src/src.pri)
 
 INCLUDEPATH += 3rdparty/oauth
 
 SOURCES += main.cpp \
-        mainwindow.cpp
+        mainwindow.cpp \
+    globals.cpp
 
-HEADERS  += mainwindow.h
+HEADERS  += mainwindow.h \
+    globals.h
 
 FORMS    += mainwindow.ui
 
