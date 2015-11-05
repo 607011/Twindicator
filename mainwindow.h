@@ -45,7 +45,7 @@ private slots:
   void onLinkingSucceeded(void);
   void onOpenBrowser(const QUrl &url);
   void onCloseBrowser(void);
-  void getUserTimelineDonw(void);
+  void getUserTimelineDone(void);
 
 private:
   Ui::MainWindow *ui;

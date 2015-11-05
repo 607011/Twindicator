@@ -120,14 +120,13 @@ void MainWindow::onCloseBrowser(void)
 }
 
 
-void MainWindow::getUserTimelineDonw(void)
+void MainWindow::getUserTimelineDone(void)
 {
   QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
   if (reply->error() != QNetworkReply::NoError) {
-      qDebug() << "ERROR:" << reply->errorString();
-      qDebug() << "content:" << reply->readAll();
+    qDebug() << "ERROR:" << reply->errorString();
   } else {
-      qDebug() << "Tweet posted sucessfully!";
+    qDebug() << "content:" << reply->readAll();
   }
 }
 
@@ -135,26 +134,17 @@ void MainWindow::getUserTimelineDonw(void)
 void MainWindow::getUserTimeline(void)
 {
   Q_D(MainWindow);
-//  if (!d->o1->linked()) {
-//    qWarning() << "Application is not linked to Twitter!";
-//    return;
-//  }
-
-  QNetworkAccessManager* manager = new QNetworkAccessManager(this);
-  O1Twitter* o1 = d->o1;
-  O1Requestor* requestor = new O1Requestor(manager, o1, this);
-
-  QList<O1RequestParameter> reqParams = QList<O1RequestParameter>();
-  reqParams << O1RequestParameter("screen_name", "ctSESAM");
-  reqParams << O1RequestParameter("count", "10");
-
-  QUrl url = QUrl("https://api.twitter.com/1.1/statuses/user_timeline.json");
-  QNetworkRequest request(url);
-  request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
-
-  QNetworkReply *reply = requestor->get(request, reqParams);
-
-
-
-  connect(reply, SIGNAL(finished()), this, SLOT(getUserTimelineDonw()));
+  if (d->o1->linked()) {
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    O1Twitter* o1 = d->o1;
+    O1Requestor* requestor = new O1Requestor(manager, o1, this);
+    QList<O1RequestParameter> reqParams = QList<O1RequestParameter>();
+    QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/user_timeline.json"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
+    QNetworkReply *reply = requestor->get(request, reqParams);
+    connect(reply, SIGNAL(finished()), this, SLOT(getUserTimelineDone()));
+  }
+  else {
+    qWarning() << "Application is not linked to Twitter!";
+  }
 }
