@@ -19,6 +19,7 @@
 
 
 #include <QDebug>
+#include <QtAlgorithms>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QDateTime>
@@ -45,6 +46,8 @@ public:
     , store(new O2SettingsStore(O2_ENCRYPTION_KEY))
     , settings(QSettings::IniFormat, QSettings::UserScope, AppCompanyName, AppName)
     , NAM(parent)
+    , tweetFilepath(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
+    , lastId(0)
   {
     oauth->setClientId(MY_CLIENT_KEY);
     oauth->setClientSecret(MY_CLIENT_SECRET);
@@ -66,6 +69,8 @@ public:
   QString tweetFilename;
   QString badTweetFilename;
   QString goodTweetFilename;
+  QJsonDocument storedTweets;
+  qlonglong lastId;
 };
 
 
@@ -77,8 +82,16 @@ MainWindow::MainWindow(QWidget *parent)
   Q_D(MainWindow);
   ui->setupUi(this);
 
-  d->tweetFilepath = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
+  d->tweetFilename = d->tweetFilepath + "/all_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
+  d->badTweetFilename = d->tweetFilepath + "/bad_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
+  d->goodTweetFilename = d->tweetFilepath + "/good_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
+
   QDir().mkpath(d->tweetFilepath);
+  QFile tweetFile(d->tweetFilename);
+  tweetFile.open(QIODevice::ReadOnly);
+  d->storedTweets = QJsonDocument::fromJson(tweetFile.readAll());
+  tweetFile.close();
+  d->lastId = d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong();
 
   QObject::connect(d->oauth, SIGNAL(linkedChanged()), SLOT(onLinkedChanged()));
   QObject::connect(d->oauth, SIGNAL(linkingFailed()), SLOT(onLinkingFailed()));
@@ -92,6 +105,7 @@ MainWindow::MainWindow(QWidget *parent)
   ui->tableWidget->installEventFilter(this);
 
   restoreSettings();
+
   d->oauth->link();
 }
 
@@ -155,9 +169,6 @@ void MainWindow::onLinkingSucceeded(void)
     ui->actionLogin->setEnabled(false);
     ui->screenNameLineEdit->setText(d->settings.value("twitter/screenName").toString());
     ui->userIdLineEdit->setText(d->settings.value("twitter/userId").toString());
-    d->tweetFilename = d->tweetFilepath + "/all_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
-    d->badTweetFilename = d->tweetFilepath + "/bad_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
-    d->goodTweetFilename = d->tweetFilepath + "/good_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
   }
   else {
     QObject::disconnect(ui->actionLogout, SIGNAL(triggered(bool)), this, SLOT(onLogout()));
@@ -186,36 +197,25 @@ void MainWindow::onCloseBrowser(void)
 
 QJsonDocument MainWindow::mergeTweets(const QJsonDocument &storedJson, const QJsonDocument &currentJson)
 {
-  QList<QVariant> stored = storedJson.toVariant().toList();
-  QList<QVariant> current = currentJson.toVariant().toList();
+  Q_D(MainWindow);
+  const QList<QVariant> &storedList = storedJson.toVariant().toList();
+  const QList<QVariant> &currentList = currentJson.toVariant().toList();
+  qDebug() << currentList.size() << "new entries since id" << d->lastId;
 
-  static const int NotFound = -1;
-
-  auto indexOf = [](const QString &id, const QList<QVariant> &posts) {
-    int idx = 0;
-    foreach (QVariant post, posts) {
-      if (post.toMap()["id_str"].toString() == id)
-        return idx;
-      ++idx;
-    }
-    return NotFound;
+  auto idComparator = [](const QVariant &a, const QVariant &b) {
+    return a.toMap()["id"].toLongLong() > b.toMap()["id"].toLongLong();
   };
 
-  QList<QVariant> result = stored;
-  foreach (QVariant post, current) {
-    const QString &id = post.toMap()["id_str"].toString();
-    int idx = indexOf(id, stored);
-    if (idx == NotFound) {
-      qDebug().nospace() << "Added post #" << id;
+  QList<QVariant> result = storedList;
+  foreach (QVariant post, currentList) {
+    QList<QVariant>::const_iterator idx;
+    idx = qBinaryFind(storedList.constBegin(), storedList.constEnd(), post, idComparator);
+    if (idx == storedList.end()) {
+      qDebug().nospace() << "Added post #" << post.toMap()["id"].toLongLong();
       result << post;
     }
   }
-
-  qSort(result.begin(), result.end(), [](const QVariant &a, const QVariant &b)
-  {
-    return a.toMap()["id"].toLongLong() > b.toMap()["id"].toLongLong();
-  });
-
+  qSort(result.begin(), result.end(), idComparator);
   return QJsonDocument::fromVariant(result);
 }
 
@@ -242,11 +242,9 @@ void MainWindow::getUserTimelineDone(void)
      * current Linux distributions this code still uses the
      * deprecated value DataLocation.
      */
+    allTweets = mergeTweets(d->storedTweets, currentTweets);
+
     QFile tweetFile(d->tweetFilename);
-    tweetFile.open(QIODevice::ReadOnly);
-    QJsonDocument storedTweets = QJsonDocument::fromJson(tweetFile.readAll());
-    tweetFile.close();
-    allTweets = mergeTweets(storedTweets, currentTweets);
     tweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
     tweetFile.write(allTweets.toJson(QJsonDocument::Indented));
     tweetFile.close();
@@ -297,7 +295,7 @@ void MainWindow::getUserTimeline(void)
   if (d->oauth->linked()) {
     O1Requestor *requestor = new O1Requestor(&d->NAM, d->oauth, this);
     QList<O1RequestParameter> reqParams;
-    reqParams << O1RequestParameter("count", "200");
+    reqParams << O1RequestParameter("since_id", QString::number(d->lastId).toLatin1());
     reqParams << O1RequestParameter("trim_user", "true");
     QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
