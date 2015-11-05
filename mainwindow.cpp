@@ -46,6 +46,18 @@ public:
     , store(new O2SettingsStore(O2_ENCRYPTION_KEY))
     , settings(QSettings::IniFormat, QSettings::UserScope, AppCompanyName, AppName)
     , NAM(parent)
+      /*
+       * From the Qt docs: "QStandardPaths::DataLocation returns the
+       * same value as AppLocalDataLocation. This enumeration value
+       * is deprecated. Using AppDataLocation is preferable since on
+       * Windows, the roaming path is recommended."
+       *
+       * AppLocalDataLocation was introduced in Qt 5.4. To maintain
+       * compatibility to Qt 5.3 (which is found in many reasonably
+       * current Linux distributions this code still uses the
+       * deprecated value DataLocation.
+       *
+       */
     , tweetFilepath(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
     , lastId(0)
   {
@@ -231,25 +243,14 @@ void MainWindow::getUserTimelineDone(void)
   }
   else {
     QJsonDocument currentTweets = QJsonDocument::fromJson(reply->readAll());
-    QJsonDocument allTweets;
-    /* From the Qt docs: "QStandardPaths::DataLocation returns the
-     * same value as AppLocalDataLocation. This enumeration value
-     * is deprecated. Using AppDataLocation is preferable since on
-     * Windows, the roaming path is recommended."
-     *
-     * AppLocalDataLocation was introduced in Qt 5.4. To maintain
-     * compatibility to Qt 5.3 (which is found in many reasonably
-     * current Linux distributions this code still uses the
-     * deprecated value DataLocation.
-     */
-    allTweets = mergeTweets(d->storedTweets, currentTweets);
+    d->storedTweets = mergeTweets(d->storedTweets, currentTweets);
 
     QFile tweetFile(d->tweetFilename);
     tweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    tweetFile.write(allTweets.toJson(QJsonDocument::Indented));
+    tweetFile.write(d->storedTweets.toJson(QJsonDocument::Indented));
     tweetFile.close();
 
-    QList<QVariant> posts = allTweets.toVariant().toList();
+    QList<QVariant> posts = d->storedTweets.toVariant().toList();
     ui->tableWidget->setRowCount(posts.count());
     qDebug() << "total number of tweets:" << posts.count();
     int row = 0;
