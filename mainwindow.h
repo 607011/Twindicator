@@ -49,7 +49,6 @@ public:
 
 protected:
   void showEvent(QShowEvent*);
-  void changeEvent(QEvent*);
   void closeEvent(QCloseEvent*);
   void timerEvent(QTimerEvent*);
   bool eventFilter(QObject *obj, QEvent *event);

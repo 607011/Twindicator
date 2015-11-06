@@ -78,8 +78,9 @@ public:
     , reply(Q_NULLPTR)
     , NAM(parent)
     , mouseDown(false)
-    , opacityEffect(Q_NULLPTR)
+    , tweetFrameOpacityEffect(Q_NULLPTR)
     , mouseMoveTimerId(0)
+    , tableBuildCalled(false)
       /*
        * From the Qt docs: "QStandardPaths::DataLocation returns the
        * same value as AppLocalDataLocation. This enumeration value
@@ -125,13 +126,14 @@ public:
   QPoint lastTweetFramePos;
   QPoint lastMousePos;
   bool mouseDown;
-  QGraphicsOpacityEffect *opacityEffect;
+  QGraphicsOpacityEffect *tweetFrameOpacityEffect;
   QTime mouseMoveTimer;
   int mouseMoveTimerId;
   QPointF velocity;
   QPropertyAnimation unfloatAnimation;
   QPropertyAnimation floatInAnimation;
   QPropertyAnimation floatOutAnimation;
+  bool tableBuildCalled;
 };
 
 
@@ -191,9 +193,9 @@ MainWindow::MainWindow(QWidget *parent)
   QObject::connect(ui->actionExit, SIGNAL(triggered(bool)), SLOT(close()));
   QObject::connect(ui->actionRefresh, SIGNAL(triggered(bool)), SLOT(getUserTimeline()));
   ui->tweetFrame->installEventFilter(this);
-  d->opacityEffect = new QGraphicsOpacityEffect(ui->tweetFrame);
-  d->opacityEffect->setOpacity(1.0);
-  ui->tweetFrame->setGraphicsEffect(d->opacityEffect);
+  d->tweetFrameOpacityEffect = new QGraphicsOpacityEffect(ui->tweetFrame);
+  d->tweetFrameOpacityEffect->setOpacity(1.0);
+  ui->tweetFrame->setGraphicsEffect(d->tweetFrameOpacityEffect);
 
   QObject::connect(&d->NAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotUserTimeline(QNetworkReply*)));
 
@@ -217,12 +219,6 @@ void MainWindow::showEvent(QShowEvent *)
 {
   Q_D(MainWindow);
   d->originalTweetFramePos = ui->tweetFrame->pos();
-}
-
-
-void MainWindow::changeEvent(QEvent *e)
-{
-  qDebug() << e->type();
 }
 
 
@@ -260,7 +256,7 @@ void MainWindow::unfloatTweet(void)
   d->unfloatAnimation.setEndValue(d->originalTweetFramePos);
   d->unfloatAnimation.setDuration(250);
   d->unfloatAnimation.start();
-  d->opacityEffect->setOpacity(1.0);
+  d->tweetFrameOpacityEffect->setOpacity(1.0);
 }
 
 
@@ -300,7 +296,7 @@ int MainWindow::dislikeLimit(void) const
 bool MainWindow::tweetFloating(void) const
 {
   const int x = ui->tweetFrame->pos().x();
-  return (dislikeLimit() < x) && (x < likeLimit());
+  return dislikeLimit() < x && x < likeLimit();
 }
 
 
@@ -312,7 +308,7 @@ void MainWindow::scrollBy(const QPoint &offset)
   qreal opacity = qreal(ui->tweetFrame->width() - ui->tweetFrame->pos().x()) / ui->tweetFrame->width();
   if (opacity > 1.0)
     opacity = 2.0 - opacity;
-  d->opacityEffect->setOpacity(opacity - 0.25);
+  d->tweetFrameOpacityEffect->setOpacity(opacity - 0.25);
   if (ui->tweetFrame->pos().x() < dislikeLimit()) {
     dislike();
   }
@@ -465,7 +461,7 @@ void MainWindow::pickNextTweet(void)
   d->floatInAnimation.setEndValue(d->originalTweetFramePos);
   d->floatInAnimation.setDuration(250);
   d->floatInAnimation.start();
-  d->opacityEffect->setOpacity(1.0);
+  d->tweetFrameOpacityEffect->setOpacity(1.0);
   ui->tableWidget->removeRow(0);
 }
 
@@ -482,6 +478,12 @@ void MainWindow::buildTable(const QJsonDocument &mostRecentTweets)
   tweetFile.close();
 
   QList<QVariant> posts = d->storedTweets.toVariant().toList();
+  if (posts.isEmpty() && !d->tableBuildCalled) {
+    getUserTimeline();
+    return;
+  }
+
+  d->tableBuildCalled = true;
   ui->tableWidget->setRowCount(posts.count());
   qDebug() << "total number of tweets:" << posts.count();
   int row = 0;
