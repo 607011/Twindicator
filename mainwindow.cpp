@@ -191,14 +191,6 @@ MainWindow::MainWindow(QWidget *parent)
     goodTweets.close();
   }
 
-  d->lastId = 0;
-  if (!d->storedTweets.isEmpty())
-    d->lastId = qMax(d->storedTweets.first().toObject().toVariantMap()["id"].toLongLong(), d->lastId);
-  if (!d->badTweets.isEmpty())
-    d->lastId = qMax(d->badTweets.first().toObject().toVariantMap()["id"].toLongLong(), d->lastId);
-  if (!d->goodTweets.isEmpty())
-    d->lastId = qMax(d->goodTweets.first().toObject().toVariantMap()["id"].toLongLong(), d->lastId);
-
   QObject::connect(d->oauth, SIGNAL(linkedChanged()), SLOT(onLinkedChanged()));
   QObject::connect(d->oauth, SIGNAL(linkingFailed()), SLOT(onLinkingFailed()));
   QObject::connect(d->oauth, SIGNAL(linkingSucceeded()), SLOT(onLinkingSucceeded()));
@@ -216,8 +208,8 @@ MainWindow::MainWindow(QWidget *parent)
   d->floatInAnimation.setTargetObject(ui->tweetFrame);
   d->unfloatAnimation.setTargetObject(ui->tweetFrame);
 
-//  ui->likeButton->stackUnder(ui->tweetFrame);
-//  ui->dislikeButton->stackUnder(ui->tweetFrame);
+  ui->likeButton->stackUnder(ui->tweetFrame);
+  ui->dislikeButton->stackUnder(ui->tweetFrame);
 
   QObject::connect(&d->NAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotUserTimeline(QNetworkReply*)));
 
@@ -489,6 +481,29 @@ QJsonArray MainWindow::mergeTweets(const QJsonArray &storedJson, const QJsonArra
 }
 
 
+void MainWindow::calculateLastId(void)
+{
+  Q_D(MainWindow);
+  d->lastId = 0;
+  if (!d->storedTweets.isEmpty()) {
+    qlonglong id = d->storedTweets.first().toVariant().toMap()["id"].toLongLong();
+    qDebug() << "stored" << id;
+    d->lastId = qMax(id, d->lastId);
+  }
+  if (!d->badTweets.isEmpty()) {
+    qlonglong id = d->badTweets.first().toVariant().toMap()["id"].toLongLong();
+    qDebug() << "bad   " << id;
+    d->lastId = qMax(id, d->lastId);
+  }
+  if (!d->goodTweets.isEmpty()) {
+    qlonglong id = d->goodTweets.first().toVariant().toMap()["id"].toLongLong();
+    qDebug() << "good  " << id;
+    d->lastId = qMax(id, d->lastId);
+  }
+  qDebug() << "calculateLastId()" << d->lastId;
+}
+
+
 void MainWindow::pickNextTweet(void)
 {
   Q_D(MainWindow);
@@ -504,6 +519,7 @@ void MainWindow::pickNextTweet(void)
     }
     d->currentTweet = d->storedTweets.first();
     d->storedTweets.pop_front();
+    calculateLastId();
     static const QRegExp delim("\\s", Qt::CaseSensitive, QRegExp::RegExp2);
     const QStringList &words = ui->tableWidget->itemAt(0, 0)->text().split(delim);
     FlowLayout *flowLayout = new FlowLayout(2, 2, 2);
@@ -529,12 +545,12 @@ void MainWindow::buildTable(const QJsonArray &mostRecentTweets)
   if (!mostRecentTweets.isEmpty()) {
     d->storedTweets = mergeTweets(d->storedTweets, mostRecentTweets);
     ui->statusBar->showMessage(tr("%1 new entries since id %2").arg(mostRecentTweets.size()).arg(d->lastId), 3000);
-    d->lastId = d->storedTweets.isEmpty() ? 0 : d->storedTweets.toVariantList().first().toMap()["id"].toLongLong();
     QFile tweetFile(d->tweetFilename);
     tweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
     tweetFile.write(QJsonDocument(d->storedTweets).toJson(QJsonDocument::Indented));
     tweetFile.close();
   }
+  calculateLastId();
 
   if (d->storedTweets.isEmpty() && !d->tableBuildCalled) {
     getUserTimeline();
@@ -564,7 +580,6 @@ void MainWindow::buildTable(void)
 
 void MainWindow::gotUserTimeline(QNetworkReply *reply)
 {
-
   if (reply->error() != QNetworkReply::NoError) {
     ui->statusBar->showMessage(tr("Error: %1").arg(reply->errorString()));
     qDebug() << reply->readAll();
