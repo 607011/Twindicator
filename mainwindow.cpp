@@ -483,23 +483,18 @@ void MainWindow::calculateMostRecentId(void)
 {
   Q_D(MainWindow);
   d->mostRecentId = d->currentTweet.toVariant().toMap()["id"].toLongLong();
-  qDebug() << "current" << d->mostRecentId;
   if (!d->storedTweets.isEmpty()) {
     qlonglong id = d->storedTweets.first().toVariant().toMap()["id"].toLongLong();
-    qDebug() << "stored " << id;
     d->mostRecentId = qMax(id, d->mostRecentId);
   }
   if (!d->badTweets.isEmpty()) {
     qlonglong id = d->badTweets.last().toVariant().toMap()["id"].toLongLong();
-    qDebug() << "bad    " << id;
     d->mostRecentId = qMax(id, d->mostRecentId);
   }
   if (!d->goodTweets.isEmpty()) {
     qlonglong id = d->goodTweets.last().toVariant().toMap()["id"].toLongLong();
-    qDebug() << "good   " << id;
     d->mostRecentId = qMax(id, d->mostRecentId);
   }
-  qDebug() << "calculateMostRecentId()" << d->mostRecentId;
 }
 
 
