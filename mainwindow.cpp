@@ -64,8 +64,9 @@ QDebug operator<<(QDebug debug, const KineticData &kd)
 
 
 static const int MaxKineticDataSamples = 5;
-const qreal Friction = 0.95;
-const int TimeInterval = 25;
+static const qreal Friction = 0.95;
+static const int TimeInterval = 25;
+static const int AnimationDuration = 300;
 
 
 class MainWindowPrivate
@@ -104,10 +105,13 @@ public:
     oauth->setSignatureMethod(O2_SIGNATURE_TYPE_HMAC_SHA1);
     floatInAnimation.setPropertyName("pos");
     floatInAnimation.setEasingCurve(QEasingCurve::InOutCubic);
-    floatInAnimation.setDuration(250);
+    floatInAnimation.setDuration(AnimationDuration);
     floatOutAnimation.setPropertyName("pos");
     floatOutAnimation.setEasingCurve(QEasingCurve::InQuad);
-    floatOutAnimation.setDuration(250);
+    floatOutAnimation.setDuration(AnimationDuration);
+    unfloatAnimation.setPropertyName("pos");
+    unfloatAnimation.setDuration(AnimationDuration);
+    unfloatAnimation.setEasingCurve(QEasingCurve::InOutQuad);
   }
   ~MainWindowPrivate()
   {
@@ -256,11 +260,8 @@ void MainWindow::unfloatTweet(void)
 {
   Q_D(MainWindow);
   d->unfloatAnimation.setTargetObject(ui->tweetFrame);
-  d->unfloatAnimation.setPropertyName("pos");
-  d->unfloatAnimation.setEasingCurve(QEasingCurve::InOutQuad);
   d->unfloatAnimation.setStartValue(ui->tweetFrame->pos());
   d->unfloatAnimation.setEndValue(d->originalTweetFramePos);
-  d->unfloatAnimation.setDuration(250);
   d->unfloatAnimation.start();
   d->tweetFrameOpacityEffect->setOpacity(1.0);
 }
@@ -551,7 +552,7 @@ void MainWindow::onLikePressed(void)
   d->floatOutAnimation.setStartValue(ui->tweetFrame->pos());
   d->floatOutAnimation.setEndValue(d->originalTweetFramePos + QPoint(ui->tweetFrame->width() * 2, 0));
   d->floatOutAnimation.start();
-  QTimer::singleShot(250, this, &MainWindow::pickNextTweet);
+  QTimer::singleShot(AnimationDuration, this, &MainWindow::pickNextTweet);
 }
 
 
@@ -562,7 +563,7 @@ void MainWindow::onDislikePressed(void)
   d->floatOutAnimation.setStartValue(ui->tweetFrame->pos());
   d->floatOutAnimation.setEndValue(d->originalTweetFramePos - QPoint(ui->tweetFrame->width() * 2, 0));
   d->floatOutAnimation.start();
-  QTimer::singleShot(250, this, &MainWindow::pickNextTweet);
+  QTimer::singleShot(AnimationDuration, this, &MainWindow::pickNextTweet);
 }
 
 
