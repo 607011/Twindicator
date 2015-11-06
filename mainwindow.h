@@ -27,6 +27,9 @@
 #include <QEvent>
 #include <QCloseEvent>
 #include <QNetworkReply>
+#include <QTimerEvent>
+#include <QPointF>
+#include <QPoint>
 
 namespace Ui {
 class MainWindow;
@@ -44,6 +47,7 @@ public:
 
 protected:
   void closeEvent(QCloseEvent*);
+  void timerEvent(QTimerEvent*);
   bool eventFilter(QObject *obj, QEvent *event);
 
 private slots:
@@ -68,6 +72,9 @@ private: // methods
   void saveSettings(void);
   void restoreSettings(void);
   QJsonDocument mergeTweets(const QJsonDocument &a, const QJsonDocument &b);
+  void startMotion(const QPointF &velocity);
+  void stopMotion(void);
+  void scrollBy(const QPoint &offset);
 };
 
 #endif // __MAINWINDOW_H_

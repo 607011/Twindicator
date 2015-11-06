@@ -27,6 +27,11 @@
 #include <QJsonDocument>
 #include <QDir>
 #include <QFile>
+#include <QPoint>
+#include <QGraphicsOpacityEffect>
+#include <QTime>
+#include <QVector>
+#include <qmath.h>
 
 #include "globals.h"
 #include "mainwindow.h"
@@ -36,6 +41,26 @@
 #include "o1requestor.h"
 #include "o2globals.h"
 #include "o2settingsstore.h"
+
+struct KineticData {
+    KineticData(void) : t(0) { /* ... */ }
+    KineticData(const QPoint& p, int t) : p(p), t(t) { /* ... */ }
+    QPoint p;
+    int t;
+};
+
+QDebug operator<<(QDebug debug, const KineticData &kd)
+{
+  QDebugStateSaver saver(debug);
+  (void)saver;
+  debug.nospace() << "KineticData(" << kd.p << "," << kd.t << ")";
+  return debug;
+}
+
+
+static const int MaxKineticDataSamples = 5;
+const qreal Friction = 0.95;
+const int TimeInterval = 25;
 
 
 class MainWindowPrivate
@@ -47,6 +72,9 @@ public:
     , settings(QSettings::IniFormat, QSettings::UserScope, AppCompanyName, AppName)
     , reply(Q_NULLPTR)
     , NAM(parent)
+    , mouseDown(false)
+    , opacityEffect(Q_NULLPTR)
+    , mouseMoveTimerId(0)
       /*
        * From the Qt docs: "QStandardPaths::DataLocation returns the
        * same value as AppLocalDataLocation. This enumeration value
@@ -62,18 +90,19 @@ public:
     , tweetFilepath(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
     , lastId(0)
   {
+    store->setGroupKey("twitter");
+    oauth->setStore(store);
     oauth->setClientId(MY_CLIENT_KEY);
     oauth->setClientSecret(MY_CLIENT_SECRET);
     oauth->setLocalPort(44333);
     oauth->setSignatureMethod(O2_SIGNATURE_TYPE_HMAC_SHA1);
-    store->setGroupKey("twitter");
-    oauth->setStore(store);
   }
   ~MainWindowPrivate()
   {
     /* ... */
   }
 
+  QVector<KineticData> kineticData;
   O1Twitter *oauth;
   O2SettingsStore *store;
   QSettings settings;
@@ -87,7 +116,15 @@ public:
   QJsonDocument badTweets;
   QJsonDocument goodTweets;
   qlonglong lastId;
+  QPoint lastWidgetPos;
+  QPoint lastMousePos;
+  bool mouseDown;
+  QGraphicsOpacityEffect *opacityEffect;
+  QTime mouseMoveTimer;
+  int mouseMoveTimerId;
+  QPointF velocity;
 };
+
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -142,6 +179,10 @@ MainWindow::MainWindow(QWidget *parent)
   QObject::connect(d->oauth, SIGNAL(closeBrowser()), SLOT(onCloseBrowser()));
   QObject::connect(ui->actionExit, SIGNAL(triggered(bool)), SLOT(close()));
   QObject::connect(ui->actionRefresh, SIGNAL(triggered(bool)), SLOT(getUserTimeline()));
+  ui->tweetLabel->installEventFilter(this);
+  d->opacityEffect = new QGraphicsOpacityEffect(ui->tweetLabel);
+  d->opacityEffect->setOpacity(1.0);
+  ui->tweetLabel->setGraphicsEffect(d->opacityEffect);
 
   QObject::connect(&d->NAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotUserTimeline(QNetworkReply*)));
 
@@ -161,12 +202,112 @@ MainWindow::~MainWindow()
 
 void MainWindow::closeEvent(QCloseEvent*)
 {
+  stopMotion();
   saveSettings();
+}
+
+
+void MainWindow::timerEvent(QTimerEvent *e)
+{
+  Q_D(MainWindow);
+  if (e->timerId() == d->mouseMoveTimerId) {
+    if (d->velocity.manhattanLength() > M_SQRT2) {
+      scrollBy(d->velocity.toPoint());
+      d->velocity *= Friction;
+    }
+    else {
+      stopMotion();
+    }
+  }
+}
+
+
+void MainWindow::startMotion(const QPointF& velocity)
+{
+  Q_D(MainWindow);
+  d->velocity = velocity;
+  if (d->mouseMoveTimerId == 0)
+    d->mouseMoveTimerId = startTimer(TimeInterval);
+}
+
+
+void MainWindow::stopMotion(void)
+{
+  Q_D(MainWindow);
+  if (d->mouseMoveTimerId) {
+    killTimer(d->mouseMoveTimerId);
+    d->mouseMoveTimerId = 0;
+  }
+  d->velocity = QPointF();
+}
+
+
+void MainWindow::scrollBy(const QPoint &offset)
+{
+  Q_D(MainWindow);
+  ui->tweetLabel->move(offset.x() + d->lastWidgetPos.x(), d->lastWidgetPos.y());
+  d->lastWidgetPos = ui->tweetLabel->pos();
+  qreal opacity = qreal(ui->tweetLabel->width() - ui->tweetLabel->pos().x()) / ui->tweetLabel->width();
+  if (opacity > 1.0)
+    opacity = 2.0 - opacity;
+  d->opacityEffect->setOpacity(opacity - 0.25);
 }
 
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
+  Q_D(MainWindow);
+  switch (event->type()) {
+  case QEvent::MouseButtonPress:
+  {
+    if (obj->objectName() == ui->tweetLabel->objectName()) {
+      QMouseEvent *mouseEvent = reinterpret_cast<QMouseEvent*>(event);
+      if (mouseEvent->button() == Qt::LeftButton) {
+        d->lastWidgetPos = ui->tweetLabel->pos();
+        d->lastMousePos = mouseEvent->globalPos();
+        d->mouseDown = true;
+        ui->tweetLabel->setCursor(Qt::ClosedHandCursor);
+        d->mouseMoveTimer.start();
+        d->kineticData.clear();
+      }
+    }
+    break;
+  }
+  case QEvent::MouseMove:
+  {
+    QMouseEvent *mouseEvent = reinterpret_cast<QMouseEvent*>(event);
+    if (d->mouseDown && obj->objectName() == ui->tweetLabel->objectName()) {
+      scrollBy(QPoint(mouseEvent->globalPos().x() - d->lastMousePos.x(), 0));
+      d->kineticData.append(KineticData(mouseEvent->globalPos(), d->mouseMoveTimer.elapsed()));
+      if (d->kineticData.size() > MaxKineticDataSamples)
+        d->kineticData.erase(d->kineticData.begin());
+      d->lastMousePos = mouseEvent->globalPos();
+    }
+    break;
+  }
+  case QEvent::MouseButtonRelease:
+  {
+    if (obj->objectName() == ui->tweetLabel->objectName()) {
+      QMouseEvent *mouseEvent = reinterpret_cast<QMouseEvent*>(event);
+      if (mouseEvent->button() == Qt::LeftButton) {
+        d->mouseDown = false;
+        ui->tweetLabel->setCursor(Qt::OpenHandCursor);
+        if (d->kineticData.count() == MaxKineticDataSamples) {
+          int timeSinceLastMoveEvent = d->mouseMoveTimer.elapsed() - d->kineticData.last().t;
+          if (timeSinceLastMoveEvent < 100) {
+            int dt = d->mouseMoveTimer.elapsed() - d->kineticData.first().t;
+            const QPointF& moveDist = QPointF(mouseEvent->globalPos().x() - d->kineticData.first().p.x(), 0);
+            const QPointF& initialVector = 1000 * moveDist / dt / TimeInterval;
+            startMotion(initialVector);
+          }
+        }
+      }
+    }
+    break;
+  }
+  default:
+    break;
+  }
   return QObject::eventFilter(obj, event);
 }
 
