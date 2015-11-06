@@ -100,7 +100,7 @@ public:
        *
        */
     , tweetFilepath(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
-    , lastId(0)
+    , mostRecentId(0)
   {
     store->setGroupKey("twitter");
     oauth->setStore(store);
@@ -136,7 +136,7 @@ public:
   QJsonArray storedTweets;
   QJsonArray badTweets;
   QJsonArray goodTweets;
-  qlonglong lastId;
+  qlonglong mostRecentId;
   QPoint originalTweetFramePos;
   QPoint lastTweetFramePos;
   QPoint lastMousePos;
@@ -176,14 +176,12 @@ MainWindow::MainWindow(QWidget *parent)
     d->storedTweets = QJsonDocument::fromJson(tweetFile.readAll()).array();
     tweetFile.close();
   }
-
   QFile badTweetsFile(d->badTweetFilename);
   ok = badTweetsFile.open(QIODevice::ReadOnly);
   if (ok) {
     d->badTweets = QJsonDocument::fromJson(badTweetsFile.readAll()).array();
     badTweetsFile.close();
   }
-
   QFile goodTweets(d->goodTweetFilename);
   ok = goodTweets.open(QIODevice::ReadOnly);
   if (ok) {
@@ -481,26 +479,27 @@ QJsonArray MainWindow::mergeTweets(const QJsonArray &storedJson, const QJsonArra
 }
 
 
-void MainWindow::calculateLastId(void)
+void MainWindow::calculateMostRecentId(void)
 {
   Q_D(MainWindow);
-  d->lastId = 0;
+  d->mostRecentId = d->currentTweet.toVariant().toMap()["id"].toLongLong();
+  qDebug() << "current" << d->mostRecentId;
   if (!d->storedTweets.isEmpty()) {
     qlonglong id = d->storedTweets.first().toVariant().toMap()["id"].toLongLong();
-    qDebug() << "stored" << id;
-    d->lastId = qMax(id, d->lastId);
+    qDebug() << "stored " << id;
+    d->mostRecentId = qMax(id, d->mostRecentId);
   }
   if (!d->badTweets.isEmpty()) {
-    qlonglong id = d->badTweets.first().toVariant().toMap()["id"].toLongLong();
-    qDebug() << "bad   " << id;
-    d->lastId = qMax(id, d->lastId);
+    qlonglong id = d->badTweets.last().toVariant().toMap()["id"].toLongLong();
+    qDebug() << "bad    " << id;
+    d->mostRecentId = qMax(id, d->mostRecentId);
   }
   if (!d->goodTweets.isEmpty()) {
-    qlonglong id = d->goodTweets.first().toVariant().toMap()["id"].toLongLong();
-    qDebug() << "good  " << id;
-    d->lastId = qMax(id, d->lastId);
+    qlonglong id = d->goodTweets.last().toVariant().toMap()["id"].toLongLong();
+    qDebug() << "good   " << id;
+    d->mostRecentId = qMax(id, d->mostRecentId);
   }
-  qDebug() << "calculateLastId()" << d->lastId;
+  qDebug() << "calculateMostRecentId()" << d->mostRecentId;
 }
 
 
@@ -519,7 +518,7 @@ void MainWindow::pickNextTweet(void)
     }
     d->currentTweet = d->storedTweets.first();
     d->storedTweets.pop_front();
-    calculateLastId();
+    calculateMostRecentId();
     static const QRegExp delim("\\s", Qt::CaseSensitive, QRegExp::RegExp2);
     const QStringList &words = ui->tableWidget->itemAt(0, 0)->text().split(delim);
     FlowLayout *flowLayout = new FlowLayout(2, 2, 2);
@@ -544,13 +543,13 @@ void MainWindow::buildTable(const QJsonArray &mostRecentTweets)
   Q_D(MainWindow);
   if (!mostRecentTweets.isEmpty()) {
     d->storedTweets = mergeTweets(d->storedTweets, mostRecentTweets);
-    ui->statusBar->showMessage(tr("%1 new entries since id %2").arg(mostRecentTweets.size()).arg(d->lastId), 3000);
+    ui->statusBar->showMessage(tr("%1 new entries since id %2").arg(mostRecentTweets.size()).arg(d->mostRecentId), 3000);
     QFile tweetFile(d->tweetFilename);
     tweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
     tweetFile.write(QJsonDocument(d->storedTweets).toJson(QJsonDocument::Indented));
     tweetFile.close();
   }
-  calculateLastId();
+  calculateMostRecentId();
 
   if (d->storedTweets.isEmpty() && !d->tableBuildCalled) {
     getUserTimeline();
@@ -582,14 +581,12 @@ void MainWindow::gotUserTimeline(QNetworkReply *reply)
 {
   if (reply->error() != QNetworkReply::NoError) {
     ui->statusBar->showMessage(tr("Error: %1").arg(reply->errorString()));
-    qDebug() << reply->readAll();
-    QJsonDocument msg = QJsonDocument::fromJson(reply->readAll());
-    QJsonArray errors = msg.toVariant().toMap()["errors"].toJsonArray();
-    QString err = "<ul>";
-    foreach (QJsonValue e, errors)
-      err += e.toVariant().toMap()["message"].toString();
-    err += "</ul>";
-    QMessageBox::warning(this, tr("Error"), err);
+    const QJsonDocument &msg = QJsonDocument::fromJson(reply->readAll());
+    const QList<QVariant> &errors = msg.toVariant().toMap()["errors"].toList();
+    QString errMsg;
+    foreach (QVariant e, errors)
+      errMsg += QString("%1 (code: %2)\n").arg(e.toMap()["message"].toString()).arg(e.toMap()["code"].toInt());
+    QMessageBox::warning(this, tr("Error"), errMsg);
   }
   else {
     const QJsonArray &mostRecentTweets = QJsonDocument::fromJson(reply->readAll()).array();
@@ -642,8 +639,8 @@ void MainWindow::getUserTimeline(void)
   if (d->oauth->linked()) {
     O1Requestor *requestor = new O1Requestor(&d->NAM, d->oauth, this);
     QList<O1RequestParameter> reqParams;
-    if (d->lastId > 0)
-      reqParams << O1RequestParameter("since_id", QString::number(d->lastId).toLatin1());
+    if (d->mostRecentId > 0)
+      reqParams << O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1());
     else
       reqParams << O1RequestParameter("count", "200");
     reqParams << O1RequestParameter("trim_user", "true");

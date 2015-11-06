@@ -88,7 +88,7 @@ private: // methods
   bool tweetFloating(void) const;
   void unfloatTweet(void);
   void buildTable(const QJsonArray &mostRecentTweets);
-  void calculateLastId(void);
+  void calculateMostRecentId(void);
 };
 
 #endif // __MAINWINDOW_H_
