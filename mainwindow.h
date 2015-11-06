@@ -75,6 +75,7 @@ private: // methods
   void startMotion(const QPointF &velocity);
   void stopMotion(void);
   void scrollBy(const QPoint &offset);
+  void pickNextTweet(void);
 };
 
 #endif // __MAINWINDOW_H_

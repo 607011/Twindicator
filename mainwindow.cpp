@@ -253,7 +253,6 @@ void MainWindow::scrollBy(const QPoint &offset)
   d->opacityEffect->setOpacity(opacity - 0.25);
 }
 
-
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
   Q_D(MainWindow);
@@ -383,6 +382,13 @@ QJsonDocument MainWindow::mergeTweets(const QJsonDocument &storedJson, const QJs
 }
 
 
+void MainWindow::pickNextTweet(void)
+{
+  ui->tweetLabel->setText(ui->tableWidget->itemAt(0, 0)->text());
+  ui->tableWidget->removeRow(0);
+}
+
+
 void MainWindow::gotUserTimeline(QNetworkReply *reply)
 {
   Q_D(MainWindow);
@@ -405,15 +411,13 @@ void MainWindow::gotUserTimeline(QNetworkReply *reply)
     int row = 0;
     foreach(QVariant p, posts) {
       const QVariantMap &post = p.toMap();
-      QTableWidgetItem *itemId = new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong()));
-      QTableWidgetItem *itemCreatedAt = new QTableWidgetItem(post["created_at"].toString());
-      QTableWidgetItem *itemText = new QTableWidgetItem(post["text"].toString());
-      ui->tableWidget->setItem(row, 0, itemText);
-      ui->tableWidget->setItem(row, 1, itemCreatedAt);
-      ui->tableWidget->setItem(row, 2, itemId);
+      ui->tableWidget->setItem(row, 0, new QTableWidgetItem(post["text"].toString()));
+      ui->tableWidget->setItem(row, 1, new QTableWidgetItem(post["created_at"].toString()));
+      ui->tableWidget->setItem(row, 2, new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong())));
       ++row;
     }
     ui->tableWidget->resizeColumnToContents(0);
+    pickNextTweet();
   }
 }
 
