@@ -22,7 +22,7 @@
 const QString AppCompanyName = "ct";
 const QString AppCompanyDomain = "http://www.ct.de/";
 const QString AppName = "Tweenderific";
-const QString AppVersion = TWEENDERIFIC_VERSION;
+const QString AppVersion = TWINDICATOR_VERSION;
 const QString AppURL = "https://github.com/ola-ct/Tweenderific";
 const QString AppAuthor = "Oliver Lau";
 const QString AppAuthorMail = "ola@ct.de";
