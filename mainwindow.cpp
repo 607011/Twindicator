@@ -102,6 +102,12 @@ public:
     oauth->setClientSecret(MY_CLIENT_SECRET);
     oauth->setLocalPort(44333);
     oauth->setSignatureMethod(O2_SIGNATURE_TYPE_HMAC_SHA1);
+    floatInAnimation.setPropertyName("pos");
+    floatInAnimation.setEasingCurve(QEasingCurve::InOutCubic);
+    floatInAnimation.setDuration(250);
+    floatOutAnimation.setPropertyName("pos");
+    floatOutAnimation.setEasingCurve(QEasingCurve::InQuad);
+    floatOutAnimation.setDuration(250);
   }
   ~MainWindowPrivate()
   {
@@ -283,7 +289,7 @@ void MainWindow::stopMotion(void)
 
 int MainWindow::likeLimit(void) const
 {
-  return 90 * ui->tweetFrame->width() / 100;
+  return ui->tweetFrame->width();
 }
 
 
@@ -453,23 +459,23 @@ void MainWindow::pickNextTweet(void)
 {
   Q_D(MainWindow);
   stopMotion();
-  ui->tweetLabel->setText(ui->tableWidget->itemAt(0, 0)->text()); // XXX
-  d->floatInAnimation.setTargetObject(ui->tweetFrame);
-  d->floatInAnimation.setPropertyName("pos");
-  d->floatInAnimation.setEasingCurve(QEasingCurve::InOutCubic);
-  d->floatInAnimation.setStartValue(d->originalTweetFramePos + QPoint(0, ui->tweetFrame->height()));
-  d->floatInAnimation.setEndValue(d->originalTweetFramePos);
-  d->floatInAnimation.setDuration(250);
-  d->floatInAnimation.start();
-  d->tweetFrameOpacityEffect->setOpacity(1.0);
-  ui->tableWidget->removeRow(0);
+  if (ui->tableWidget->columnCount() > 0 && ui->tableWidget->rowCount() > 0) {
+    ui->tweetLabel->setText(ui->tableWidget->itemAt(0, 0)->text()); // XXX
+    d->floatInAnimation.setTargetObject(ui->tweetFrame);
+    d->floatInAnimation.setStartValue(d->originalTweetFramePos + QPoint(0, ui->tweetFrame->height()));
+    d->floatInAnimation.setEndValue(d->originalTweetFramePos);
+    d->floatInAnimation.start();
+    d->tweetFrameOpacityEffect->setOpacity(1.0);
+    ui->tableWidget->removeRow(0);
+  }
 }
 
 
 void MainWindow::buildTable(const QJsonDocument &mostRecentTweets)
 {
   Q_D(MainWindow);
-  d->storedTweets = mergeTweets(d->storedTweets, mostRecentTweets);
+  if (!mostRecentTweets.isEmpty())
+    d->storedTweets = mergeTweets(d->storedTweets, mostRecentTweets);
   d->lastId = d->storedTweets.toVariant().toList().isEmpty() ? 0 : d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong();
 
   QFile tweetFile(d->tweetFilename);
@@ -485,7 +491,6 @@ void MainWindow::buildTable(const QJsonDocument &mostRecentTweets)
 
   d->tableBuildCalled = true;
   ui->tableWidget->setRowCount(posts.count());
-  qDebug() << "total number of tweets:" << posts.count();
   int row = 0;
   foreach(QVariant p, posts) {
     const QVariantMap &post = p.toMap();
@@ -513,9 +518,8 @@ void MainWindow::gotUserTimeline(QNetworkReply *reply)
     QJsonDocument msg = QJsonDocument::fromJson(reply->readAll());
     QJsonArray errors = msg.toVariant().toMap()["errors"].toJsonArray();
     QString err = "<ul>";
-    foreach (QVariant e, errors) {
+    foreach (QVariant e, errors)
       err += e.toMap()["message"].toString();
-    }
     err += "</ul>";
     QMessageBox::warning(this, tr("Error"), err);
   }
@@ -544,11 +548,8 @@ void MainWindow::onLikePressed(void)
 {
   Q_D(MainWindow);
   d->floatOutAnimation.setTargetObject(ui->tweetFrame);
-  d->floatOutAnimation.setPropertyName("pos");
-  d->floatOutAnimation.setEasingCurve(QEasingCurve::InQuad);
   d->floatOutAnimation.setStartValue(ui->tweetFrame->pos());
   d->floatOutAnimation.setEndValue(d->originalTweetFramePos + QPoint(ui->tweetFrame->width() * 2, 0));
-  d->floatOutAnimation.setDuration(250);
   d->floatOutAnimation.start();
   QTimer::singleShot(250, this, &MainWindow::pickNextTweet);
 }
@@ -558,11 +559,8 @@ void MainWindow::onDislikePressed(void)
 {
   Q_D(MainWindow);
   d->floatOutAnimation.setTargetObject(ui->tweetFrame);
-  d->floatOutAnimation.setPropertyName("pos");
-  d->floatOutAnimation.setEasingCurve(QEasingCurve::InQuad);
   d->floatOutAnimation.setStartValue(ui->tweetFrame->pos());
   d->floatOutAnimation.setEndValue(d->originalTweetFramePos - QPoint(ui->tweetFrame->width() * 2, 0));
-  d->floatOutAnimation.setDuration(250);
   d->floatOutAnimation.start();
   QTimer::singleShot(250, this, &MainWindow::pickNextTweet);
 }
