@@ -20,16 +20,21 @@
 
 #include <QDebug>
 #include <QtAlgorithms>
+#include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QDir>
 #include <QFile>
 #include <QPoint>
 #include <QGraphicsOpacityEffect>
+#include <QEasingCurve>
+#include <QPropertyAnimation>
 #include <QTime>
+#include <QTimer>
 #include <QVector>
 #include <qmath.h>
 
@@ -116,13 +121,17 @@ public:
   QJsonDocument badTweets;
   QJsonDocument goodTweets;
   qlonglong lastId;
-  QPoint lastWidgetPos;
+  QPoint originalTweetFramePos;
+  QPoint lastTweetFramePos;
   QPoint lastMousePos;
   bool mouseDown;
   QGraphicsOpacityEffect *opacityEffect;
   QTime mouseMoveTimer;
   int mouseMoveTimerId;
   QPointF velocity;
+  QPropertyAnimation unfloatAnimation;
+  QPropertyAnimation floatInAnimation;
+  QPropertyAnimation floatOutAnimation;
 };
 
 
@@ -177,12 +186,14 @@ MainWindow::MainWindow(QWidget *parent)
   QObject::connect(d->oauth, SIGNAL(linkingSucceeded()), SLOT(onLinkingSucceeded()));
   QObject::connect(d->oauth, SIGNAL(openBrowser(QUrl)), SLOT(onOpenBrowser(QUrl)));
   QObject::connect(d->oauth, SIGNAL(closeBrowser()), SLOT(onCloseBrowser()));
+  QObject::connect(ui->likeButton, SIGNAL(clicked(bool)), SLOT(onLikePressed()));
+  QObject::connect(ui->dislikeButton, SIGNAL(clicked(bool)), SLOT(onDislikePressed()));
   QObject::connect(ui->actionExit, SIGNAL(triggered(bool)), SLOT(close()));
   QObject::connect(ui->actionRefresh, SIGNAL(triggered(bool)), SLOT(getUserTimeline()));
-  ui->tweetLabel->installEventFilter(this);
-  d->opacityEffect = new QGraphicsOpacityEffect(ui->tweetLabel);
+  ui->tweetFrame->installEventFilter(this);
+  d->opacityEffect = new QGraphicsOpacityEffect(ui->tweetFrame);
   d->opacityEffect->setOpacity(1.0);
-  ui->tweetLabel->setGraphicsEffect(d->opacityEffect);
+  ui->tweetFrame->setGraphicsEffect(d->opacityEffect);
 
   QObject::connect(&d->NAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotUserTimeline(QNetworkReply*)));
 
@@ -191,12 +202,27 @@ MainWindow::MainWindow(QWidget *parent)
   restoreSettings();
 
   d->oauth->link();
+
+  QTimer::singleShot(50, this, SLOT(buildTable()));
 }
 
 
 MainWindow::~MainWindow()
 {
   delete ui;
+}
+
+
+void MainWindow::showEvent(QShowEvent *)
+{
+  Q_D(MainWindow);
+  d->originalTweetFramePos = ui->tweetFrame->pos();
+}
+
+
+void MainWindow::changeEvent(QEvent *e)
+{
+  qDebug() << e->type();
 }
 
 
@@ -217,14 +243,31 @@ void MainWindow::timerEvent(QTimerEvent *e)
     }
     else {
       stopMotion();
+      if (tweetFloating())
+        unfloatTweet();
     }
   }
 }
 
 
-void MainWindow::startMotion(const QPointF& velocity)
+void MainWindow::unfloatTweet(void)
 {
   Q_D(MainWindow);
+  d->unfloatAnimation.setTargetObject(ui->tweetFrame);
+  d->unfloatAnimation.setPropertyName("pos");
+  d->unfloatAnimation.setEasingCurve(QEasingCurve::InOutQuad);
+  d->unfloatAnimation.setStartValue(ui->tweetFrame->pos());
+  d->unfloatAnimation.setEndValue(d->originalTweetFramePos);
+  d->unfloatAnimation.setDuration(250);
+  d->unfloatAnimation.start();
+  d->opacityEffect->setOpacity(1.0);
+}
+
+
+void MainWindow::startMotion(const QPointF &velocity)
+{
+  Q_D(MainWindow);
+  d->lastTweetFramePos = ui->tweetFrame->pos();
   d->velocity = velocity;
   if (d->mouseMoveTimerId == 0)
     d->mouseMoveTimerId = startTimer(TimeInterval);
@@ -242,16 +285,42 @@ void MainWindow::stopMotion(void)
 }
 
 
+int MainWindow::likeLimit(void) const
+{
+  return 90 * ui->tweetFrame->width() / 100;
+}
+
+
+int MainWindow::dislikeLimit(void) const
+{
+  return -likeLimit();
+}
+
+
+bool MainWindow::tweetFloating(void) const
+{
+  const int x = ui->tweetFrame->pos().x();
+  return (dislikeLimit() < x) && (x < likeLimit());
+}
+
+
 void MainWindow::scrollBy(const QPoint &offset)
 {
   Q_D(MainWindow);
-  ui->tweetLabel->move(offset.x() + d->lastWidgetPos.x(), d->lastWidgetPos.y());
-  d->lastWidgetPos = ui->tweetLabel->pos();
-  qreal opacity = qreal(ui->tweetLabel->width() - ui->tweetLabel->pos().x()) / ui->tweetLabel->width();
+  ui->tweetFrame->move(offset.x() + d->lastTweetFramePos.x(), d->lastTweetFramePos.y());
+  d->lastTweetFramePos = ui->tweetFrame->pos();
+  qreal opacity = qreal(ui->tweetFrame->width() - ui->tweetFrame->pos().x()) / ui->tweetFrame->width();
   if (opacity > 1.0)
     opacity = 2.0 - opacity;
   d->opacityEffect->setOpacity(opacity - 0.25);
+  if (ui->tweetFrame->pos().x() < dislikeLimit()) {
+    dislike();
+  }
+  else if (ui->tweetFrame->pos().x() > likeLimit()) {
+    like();
+  }
 }
+
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
@@ -259,13 +328,13 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
   switch (event->type()) {
   case QEvent::MouseButtonPress:
   {
-    if (obj->objectName() == ui->tweetLabel->objectName()) {
+    if (obj->objectName() == ui->tweetFrame->objectName()) {
       QMouseEvent *mouseEvent = reinterpret_cast<QMouseEvent*>(event);
       if (mouseEvent->button() == Qt::LeftButton) {
-        d->lastWidgetPos = ui->tweetLabel->pos();
+        d->lastTweetFramePos = ui->tweetFrame->pos();
         d->lastMousePos = mouseEvent->globalPos();
         d->mouseDown = true;
-        ui->tweetLabel->setCursor(Qt::ClosedHandCursor);
+        ui->tweetFrame->setCursor(Qt::ClosedHandCursor);
         d->mouseMoveTimer.start();
         d->kineticData.clear();
       }
@@ -275,7 +344,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
   case QEvent::MouseMove:
   {
     QMouseEvent *mouseEvent = reinterpret_cast<QMouseEvent*>(event);
-    if (d->mouseDown && obj->objectName() == ui->tweetLabel->objectName()) {
+    if (d->mouseDown && obj->objectName() == ui->tweetFrame->objectName()) {
       scrollBy(QPoint(mouseEvent->globalPos().x() - d->lastMousePos.x(), 0));
       d->kineticData.append(KineticData(mouseEvent->globalPos(), d->mouseMoveTimer.elapsed()));
       if (d->kineticData.size() > MaxKineticDataSamples)
@@ -286,18 +355,21 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
   }
   case QEvent::MouseButtonRelease:
   {
-    if (obj->objectName() == ui->tweetLabel->objectName()) {
+    if (obj->objectName() == ui->tweetFrame->objectName()) {
       QMouseEvent *mouseEvent = reinterpret_cast<QMouseEvent*>(event);
       if (mouseEvent->button() == Qt::LeftButton) {
         d->mouseDown = false;
-        ui->tweetLabel->setCursor(Qt::OpenHandCursor);
+        ui->tweetFrame->setCursor(Qt::OpenHandCursor);
         if (d->kineticData.count() == MaxKineticDataSamples) {
           int timeSinceLastMoveEvent = d->mouseMoveTimer.elapsed() - d->kineticData.last().t;
           if (timeSinceLastMoveEvent < 100) {
             int dt = d->mouseMoveTimer.elapsed() - d->kineticData.first().t;
-            const QPointF& moveDist = QPointF(mouseEvent->globalPos().x() - d->kineticData.first().p.x(), 0);
-            const QPointF& initialVector = 1000 * moveDist / dt / TimeInterval;
+            const QPointF &moveDist = QPointF(mouseEvent->globalPos().x() - d->kineticData.first().p.x(), 0);
+            const QPointF &initialVector = 1000 * moveDist / dt / TimeInterval;
             startMotion(initialVector);
+          }
+          else {
+            unfloatTweet();
           }
         }
       }
@@ -341,7 +413,6 @@ void MainWindow::onLinkingSucceeded(void)
     ui->screenNameLineEdit->setText(QString());
     ui->userIdLineEdit->setText(QString());
   }
-  getUserTimeline();
 }
 
 
@@ -384,40 +455,71 @@ QJsonDocument MainWindow::mergeTweets(const QJsonDocument &storedJson, const QJs
 
 void MainWindow::pickNextTweet(void)
 {
-  ui->tweetLabel->setText(ui->tableWidget->itemAt(0, 0)->text());
+  Q_D(MainWindow);
+  stopMotion();
+  ui->tweetLabel->setText(ui->tableWidget->itemAt(0, 0)->text()); // XXX
+  d->floatInAnimation.setTargetObject(ui->tweetFrame);
+  d->floatInAnimation.setPropertyName("pos");
+  d->floatInAnimation.setEasingCurve(QEasingCurve::InOutCubic);
+  d->floatInAnimation.setStartValue(d->originalTweetFramePos + QPoint(0, ui->tweetFrame->height()));
+  d->floatInAnimation.setEndValue(d->originalTweetFramePos);
+  d->floatInAnimation.setDuration(250);
+  d->floatInAnimation.start();
+  d->opacityEffect->setOpacity(1.0);
   ui->tableWidget->removeRow(0);
+}
+
+
+void MainWindow::buildTable(const QJsonDocument &mostRecentTweets)
+{
+  Q_D(MainWindow);
+  d->storedTweets = mergeTweets(d->storedTweets, mostRecentTweets);
+  d->lastId = d->storedTweets.toVariant().toList().isEmpty() ? 0 : d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong();
+
+  QFile tweetFile(d->tweetFilename);
+  tweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+  tweetFile.write(d->storedTweets.toJson(QJsonDocument::Indented));
+  tweetFile.close();
+
+  QList<QVariant> posts = d->storedTweets.toVariant().toList();
+  ui->tableWidget->setRowCount(posts.count());
+  qDebug() << "total number of tweets:" << posts.count();
+  int row = 0;
+  foreach(QVariant p, posts) {
+    const QVariantMap &post = p.toMap();
+    ui->tableWidget->setItem(row, 0, new QTableWidgetItem(post["text"].toString()));
+    ui->tableWidget->setItem(row, 1, new QTableWidgetItem(post["created_at"].toString()));
+    ui->tableWidget->setItem(row, 2, new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong())));
+    ++row;
+  }
+  ui->tableWidget->resizeColumnToContents(0);
+  pickNextTweet();
+}
+
+
+void MainWindow::buildTable(void)
+{
+  buildTable(QJsonDocument());
 }
 
 
 void MainWindow::gotUserTimeline(QNetworkReply *reply)
 {
-  Q_D(MainWindow);
   if (reply->error() != QNetworkReply::NoError) {
     ui->statusBar->showMessage(tr("Error: %1").arg(reply->errorString()));
+    qDebug() << reply->readAll();
+    QJsonDocument msg = QJsonDocument::fromJson(reply->readAll());
+    QJsonArray errors = msg.toVariant().toMap()["errors"].toJsonArray();
+    QString err = "<ul>";
+    foreach (QVariant e, errors) {
+      err += e.toMap()["message"].toString();
+    }
+    err += "</ul>";
+    QMessageBox::warning(this, tr("Error"), err);
   }
   else {
-    QJsonDocument currentTweets = QJsonDocument::fromJson(reply->readAll());
-    d->storedTweets = mergeTweets(d->storedTweets, currentTweets);
-    d->lastId = d->storedTweets.toVariant().toList().isEmpty() ? 0 : d->storedTweets.toVariant().toList().first().toMap()["id"].toLongLong();
-
-    QFile tweetFile(d->tweetFilename);
-    tweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    tweetFile.write(d->storedTweets.toJson(QJsonDocument::Indented));
-    tweetFile.close();
-
-    QList<QVariant> posts = d->storedTweets.toVariant().toList();
-    ui->tableWidget->setRowCount(posts.count());
-    qDebug() << "total number of tweets:" << posts.count();
-    int row = 0;
-    foreach(QVariant p, posts) {
-      const QVariantMap &post = p.toMap();
-      ui->tableWidget->setItem(row, 0, new QTableWidgetItem(post["text"].toString()));
-      ui->tableWidget->setItem(row, 1, new QTableWidgetItem(post["created_at"].toString()));
-      ui->tableWidget->setItem(row, 2, new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong())));
-      ++row;
-    }
-    ui->tableWidget->resizeColumnToContents(0);
-    pickNextTweet();
+    QJsonDocument mostRecentTweets = QJsonDocument::fromJson(reply->readAll());
+    buildTable(mostRecentTweets);
   }
 }
 
@@ -433,6 +535,46 @@ void MainWindow::onLogin(void)
 {
   Q_D(MainWindow);
   d->oauth->link();
+}
+
+
+void MainWindow::onLikePressed(void)
+{
+  Q_D(MainWindow);
+  d->floatOutAnimation.setTargetObject(ui->tweetFrame);
+  d->floatOutAnimation.setPropertyName("pos");
+  d->floatOutAnimation.setEasingCurve(QEasingCurve::InQuad);
+  d->floatOutAnimation.setStartValue(ui->tweetFrame->pos());
+  d->floatOutAnimation.setEndValue(d->originalTweetFramePos + QPoint(ui->tweetFrame->width() * 2, 0));
+  d->floatOutAnimation.setDuration(250);
+  d->floatOutAnimation.start();
+  QTimer::singleShot(250, this, &MainWindow::pickNextTweet);
+}
+
+
+void MainWindow::onDislikePressed(void)
+{
+  Q_D(MainWindow);
+  d->floatOutAnimation.setTargetObject(ui->tweetFrame);
+  d->floatOutAnimation.setPropertyName("pos");
+  d->floatOutAnimation.setEasingCurve(QEasingCurve::InQuad);
+  d->floatOutAnimation.setStartValue(ui->tweetFrame->pos());
+  d->floatOutAnimation.setEndValue(d->originalTweetFramePos - QPoint(ui->tweetFrame->width() * 2, 0));
+  d->floatOutAnimation.setDuration(250);
+  d->floatOutAnimation.start();
+  QTimer::singleShot(250, this, &MainWindow::pickNextTweet);
+}
+
+
+void MainWindow::like(void)
+{
+  pickNextTweet();
+}
+
+
+void MainWindow::dislike(void)
+{
+  pickNextTweet();
 }
 
 

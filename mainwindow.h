@@ -24,12 +24,14 @@
 #include <QMainWindow>
 #include <QUrl>
 #include <QVariantMap>
-#include <QEvent>
-#include <QCloseEvent>
 #include <QNetworkReply>
 #include <QTimerEvent>
+#include <QEvent>
+#include <QCloseEvent>
+#include <QShowEvent>
 #include <QPointF>
 #include <QPoint>
+#include <QJsonDocument>
 
 namespace Ui {
 class MainWindow;
@@ -46,6 +48,8 @@ public:
   ~MainWindow();
 
 protected:
+  void showEvent(QShowEvent*);
+  void changeEvent(QEvent*);
   void closeEvent(QCloseEvent*);
   void timerEvent(QTimerEvent*);
   bool eventFilter(QObject *obj, QEvent *event);
@@ -60,6 +64,9 @@ private slots:
   void gotUserTimeline(QNetworkReply*);
   void onLogout(void);
   void onLogin(void);
+  void onLikePressed(void);
+  void onDislikePressed(void);
+  void buildTable(void);
 
 private:
   Ui::MainWindow *ui;
@@ -76,6 +83,13 @@ private: // methods
   void stopMotion(void);
   void scrollBy(const QPoint &offset);
   void pickNextTweet(void);
+  void like(void);
+  void dislike(void);
+  int likeLimit(void) const;
+  int dislikeLimit(void) const;
+  bool tweetFloating(void) const;
+  void unfloatTweet(void);
+  void buildTable(const QJsonDocument &mostRecentTweets);
 };
 
 #endif // __MAINWINDOW_H_

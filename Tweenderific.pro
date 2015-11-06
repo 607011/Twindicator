@@ -44,3 +44,6 @@ FORMS    += mainwindow.ui
 DISTFILES += \
     README.md
 
+RESOURCES += \
+    tweenderific.qrc
+
