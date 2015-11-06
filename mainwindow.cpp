@@ -68,6 +68,17 @@ QDebug operator<<(QDebug debug, const KineticData &kd)
 }
 
 
+auto wordComparator = [](const QString &a, const QString &b) {
+  return a.compare(b, Qt::CaseInsensitive) < 0;
+};
+
+
+auto idComparator = [](const QVariant &a, const QVariant &b) {
+  return a.toMap()["id"].toLongLong() > b.toMap()["id"].toLongLong();
+};
+
+
+
 static const int MaxKineticDataSamples = 5;
 static const qreal Friction = 0.95;
 static const int TimeInterval = 25;
@@ -133,6 +144,7 @@ public:
   QString tweetFilename;
   QString badTweetFilename;
   QString goodTweetFilename;
+  QString wordListFilename;
   QJsonArray storedTweets;
   QJsonArray badTweets;
   QJsonArray goodTweets;
@@ -150,6 +162,7 @@ public:
   QPropertyAnimation floatInAnimation;
   QPropertyAnimation floatOutAnimation;
   bool tableBuildCalled;
+  QStringList relevantWords;
 };
 
 
@@ -165,6 +178,7 @@ MainWindow::MainWindow(QWidget *parent)
   d->tweetFilename = d->tweetFilepath + "/all_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
   d->badTweetFilename = d->tweetFilepath + "/bad_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
   d->goodTweetFilename = d->tweetFilepath + "/good_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
+  d->wordListFilename = d->tweetFilepath + "/relevant_words_of_" + d->settings.value("twitter/userId").toString() + ".txt";
 
   bool ok;
 
@@ -187,6 +201,16 @@ MainWindow::MainWindow(QWidget *parent)
   if (ok) {
     d->goodTweets = QJsonDocument::fromJson(goodTweets.readAll()).array();
     goodTweets.close();
+  }
+  QFile wordList(d->wordListFilename);
+  ok = wordList.open(QIODevice::ReadOnly);
+  if (ok) {
+    while (!wordList.atEnd()) {
+      QString word = QString::fromUtf8(wordList.readLine());
+      d->relevantWords << word.trimmed();
+    }
+    wordList.close();
+    qSort(d->relevantWords.begin(), d->relevantWords.end(), wordComparator);
   }
 
   QObject::connect(d->oauth, SIGNAL(linkedChanged()), SLOT(onLinkedChanged()));
@@ -258,6 +282,13 @@ void MainWindow::closeEvent(QCloseEvent*)
   goodTweetFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
   goodTweetFile.write(QJsonDocument(d->goodTweets).toJson(QJsonDocument::Indented));
   goodTweetFile.close();
+
+  QFile wordFile(d->wordListFilename);
+  wordFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+  qSort(d->relevantWords.begin(), d->relevantWords.end(), wordComparator);
+  foreach (QString word, d->relevantWords)
+    wordFile.write(word.toUtf8() + "\n");
+  wordFile.close();
 }
 
 
@@ -457,11 +488,6 @@ void MainWindow::onCloseBrowser(void)
 }
 
 
-auto idComparator = [](const QVariant &a, const QVariant &b) {
-  return a.toMap()["id"].toLongLong() > b.toMap()["id"].toLongLong();
-};
-
-
 QJsonArray MainWindow::mergeTweets(const QJsonArray &storedJson, const QJsonArray &currentJson)
 {
   const QList<QVariant> &currentList = currentJson.toVariantList();
@@ -498,6 +524,24 @@ void MainWindow::calculateMostRecentId(void)
 }
 
 
+void MainWindow::wordSelected(void)
+{
+  Q_D(MainWindow);
+  if (sender() == Q_NULLPTR)
+    return;
+  QPushButton *btn = reinterpret_cast<QPushButton*>(sender());
+  static const QRegExp reWord("([#\\w-']+)");
+  reWord.exactMatch(btn->text());
+  QString w = reWord.cap().trimmed();
+  QStringList::const_iterator idx = qBinaryFind(d->relevantWords.constBegin(), d->relevantWords.constEnd(), w, wordComparator);
+  if (idx == d->relevantWords.constEnd()) {
+    d->relevantWords << w;
+    qSort(d->relevantWords.begin(), d->relevantWords.end(), wordComparator);
+    ui->statusBar->showMessage(tr("Added \"%1\" to list of relevant words.").arg(w), 3000);
+  }
+}
+
+
 void MainWindow::pickNextTweet(void)
 {
   Q_D(MainWindow);
@@ -515,13 +559,16 @@ void MainWindow::pickNextTweet(void)
     d->storedTweets.pop_front();
     calculateMostRecentId();
     static const QRegExp delim("\\s", Qt::CaseSensitive, QRegExp::RegExp2);
+//    static const QRegExp reUrl("^(https?:\\/\\/)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([\\/\\w \\.-]*)*\\/?$", Qt::CaseInsensitive, QRegExp::RegExp2);
     const QStringList &words = ui->tableWidget->itemAt(0, 0)->text().split(delim);
     FlowLayout *flowLayout = new FlowLayout(2, 2, 2);
     foreach (QString word, words) {
-      QLabel *label = new QLabel(word);
-      label->setStyleSheet("background-color: #ffdab9; padding: 1px; font-size: 11pt");
-      label->setCursor(Qt::PointingHandCursor);
-      flowLayout->addWidget(label);
+      QPushButton *widget = new QPushButton;
+      widget->setStyleSheet("border: 1px solid #444; background-color: #ffdab9; padding: 1px 2px; font-size: 11pt");
+      widget->setText(word);
+      widget->setCursor(Qt::PointingHandCursor);
+      QObject::connect(widget, SIGNAL(clicked(bool)), SLOT(wordSelected()));
+      flowLayout->addWidget(widget);
     }
     ui->tableWidget->removeRow(0);
     d->floatInAnimation.setStartValue(d->originalTweetFramePos + QPoint(0, ui->tweetFrame->height()));
@@ -590,6 +637,27 @@ void MainWindow::gotUserTimeline(QNetworkReply *reply)
 }
 
 
+void MainWindow::getUserTimeline(void)
+{
+  Q_D(MainWindow);
+  if (d->oauth->linked()) {
+    O1Requestor *requestor = new O1Requestor(&d->NAM, d->oauth, this);
+    QList<O1RequestParameter> reqParams;
+    if (d->mostRecentId > 0)
+      reqParams << O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1());
+    else
+      reqParams << O1RequestParameter("count", "200");
+    reqParams << O1RequestParameter("trim_user", "true");
+    QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
+    d->reply = requestor->get(request, reqParams);
+  }
+  else {
+    ui->statusBar->showMessage(tr("Application is not linked to Twitter."));
+  }
+}
+
+
 void MainWindow::onLogout(void)
 {
   Q_D(MainWindow);
@@ -625,27 +693,6 @@ void MainWindow::dislike(void)
   d->floatOutAnimation.setEndValue(d->originalTweetFramePos - QPoint(3 * ui->tweetFrame->width() / 2, 0));
   d->floatOutAnimation.start();
   QTimer::singleShot(AnimationDuration, this, &MainWindow::pickNextTweet);
-}
-
-
-void MainWindow::getUserTimeline(void)
-{
-  Q_D(MainWindow);
-  if (d->oauth->linked()) {
-    O1Requestor *requestor = new O1Requestor(&d->NAM, d->oauth, this);
-    QList<O1RequestParameter> reqParams;
-    if (d->mostRecentId > 0)
-      reqParams << O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1());
-    else
-      reqParams << O1RequestParameter("count", "200");
-    reqParams << O1RequestParameter("trim_user", "true");
-    QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
-    request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
-    d->reply = requestor->get(request, reqParams);
-  }
-  else {
-    ui->statusBar->showMessage(tr("Application is not linked to Twitter."));
-  }
 }
 
 

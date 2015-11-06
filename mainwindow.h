@@ -67,6 +67,7 @@ private slots:
   void like(void);
   void dislike(void);
   void buildTable(void);
+  void wordSelected(void);
 
 private:
   Ui::MainWindow *ui;
