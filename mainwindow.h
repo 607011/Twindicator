@@ -32,6 +32,7 @@
 #include <QPointF>
 #include <QPoint>
 #include <QJsonDocument>
+#include <QJsonArray>
 
 namespace Ui {
 class MainWindow;
@@ -63,8 +64,8 @@ private slots:
   void gotUserTimeline(QNetworkReply*);
   void onLogout(void);
   void onLogin(void);
-  void onLikePressed(void);
-  void onDislikePressed(void);
+  void like(void);
+  void dislike(void);
   void buildTable(void);
 
 private:
@@ -77,18 +78,16 @@ private:
 private: // methods
   void saveSettings(void);
   void restoreSettings(void);
-  QJsonDocument mergeTweets(const QJsonDocument &a, const QJsonDocument &b);
+  QJsonArray mergeTweets(const QJsonArray &a, const QJsonArray &b);
   void startMotion(const QPointF &velocity);
   void stopMotion(void);
   void scrollBy(const QPoint &offset);
   void pickNextTweet(void);
-  void like(void);
-  void dislike(void);
   int likeLimit(void) const;
   int dislikeLimit(void) const;
   bool tweetFloating(void) const;
   void unfloatTweet(void);
-  void buildTable(const QJsonDocument &mostRecentTweets);
+  void buildTable(const QJsonArray &mostRecentTweets);
 };
 
 #endif // __MAINWINDOW_H_

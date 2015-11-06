@@ -24,9 +24,7 @@ DEFINES += \
 include(PRIVATE.pri)
 DEFINES += \
   MY_CLIENT_KEY=\\\"$${MY_CLIENT_KEY}\\\" \
-  MY_CLIENT_SECRET=\\\"$${MY_CLIENT_SECRET}\\\" \
-  MY_USERNAME=\\\"$${MY_USERNAME}\\\" \
-  MY_PASSWORD=\\\"$${MY_PASSWORD}\\\"
+  MY_CLIENT_SECRET=\\\"$${MY_CLIENT_SECRET}\\\"
 
 include(../o2/src/src.pri)
 
@@ -34,10 +32,12 @@ INCLUDEPATH += 3rdparty/oauth
 
 SOURCES += main.cpp \
         mainwindow.cpp \
-    globals.cpp
+    globals.cpp \
+    flowlayout.cpp
 
 HEADERS  += mainwindow.h \
-    globals.h
+    globals.h \
+    flowlayout.h
 
 FORMS    += mainwindow.ui
 
