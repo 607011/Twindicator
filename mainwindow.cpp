@@ -597,8 +597,8 @@ void MainWindow::buildTable(const QJsonArray &mostRecentTweets)
     getUserTimeline();
     return;
   }
-
   d->tableBuildCalled = true;
+
   ui->tableWidget->setRowCount(d->storedTweets.count());
   int row = 0;
   foreach(QJsonValue p, d->storedTweets) {
@@ -621,6 +621,7 @@ void MainWindow::buildTable(void)
 
 void MainWindow::gotUserTimeline(QNetworkReply *reply)
 {
+  Q_D(MainWindow);
   if (reply->error() != QNetworkReply::NoError) {
     ui->statusBar->showMessage(tr("Error: %1").arg(reply->errorString()));
     const QJsonDocument &msg = QJsonDocument::fromJson(reply->readAll());
@@ -632,6 +633,10 @@ void MainWindow::gotUserTimeline(QNetworkReply *reply)
   }
   else {
     const QJsonArray &mostRecentTweets = QJsonDocument::fromJson(reply->readAll()).array();
+    if (!d->currentTweet.isNull()) {
+      d->storedTweets.push_front(d->currentTweet);
+      d->currentTweet = QJsonValue();
+    }
     buildTable(mostRecentTweets);
   }
 }
