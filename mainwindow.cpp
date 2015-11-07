@@ -632,11 +632,11 @@ void MainWindow::gotUserTimeline(QNetworkReply *reply)
     QMessageBox::warning(this, tr("Error"), errMsg);
   }
   else {
-    const QJsonArray &mostRecentTweets = QJsonDocument::fromJson(reply->readAll()).array();
     if (!d->currentTweet.isNull()) {
       d->storedTweets.push_front(d->currentTweet);
       d->currentTweet = QJsonValue();
     }
+    const QJsonArray &mostRecentTweets = QJsonDocument::fromJson(reply->readAll()).array();
     buildTable(mostRecentTweets);
   }
 }
@@ -648,10 +648,9 @@ void MainWindow::getUserTimeline(void)
   if (d->oauth->linked()) {
     O1Requestor *requestor = new O1Requestor(&d->NAM, d->oauth, this);
     QList<O1RequestParameter> reqParams;
-    if (d->mostRecentId > 0)
-      reqParams << O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1());
-    else
-      reqParams << O1RequestParameter("count", "200");
+    reqParams << (d->mostRecentId > 0
+                  ? O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1())
+                  : O1RequestParameter("count", "200"));
     reqParams << O1RequestParameter("trim_user", "true");
     QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
