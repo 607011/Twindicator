@@ -236,6 +236,8 @@ MainWindow::MainWindow(QWidget *parent)
   QObject::connect(&d->NAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotUserTimeline(QNetworkReply*)));
 
   ui->tableWidget->verticalHeader()->hide();
+  ui->tableWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+  QObject::connect(ui->tableWidget, SIGNAL(customContextMenuRequested(QPoint)), SLOT(onCustomMenuRequested(QPoint)));
 
   restoreSettings();
 
@@ -539,6 +541,13 @@ void MainWindow::wordSelected(void)
     qSort(d->relevantWords.begin(), d->relevantWords.end(), wordComparator);
     ui->statusBar->showMessage(tr("Added \"%1\" to list of relevant words.").arg(w), 3000);
   }
+}
+
+
+void MainWindow::onCustomMenuRequested(const QPoint &pos)
+{
+  Q_D(MainWindow);
+  d->tableContextMenu->popup(ui->tableWidget->viewport()->mapToGlobal(pos));
 }
 
 

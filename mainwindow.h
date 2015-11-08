@@ -68,6 +68,7 @@ private slots:
   void dislike(void);
   void buildTable(void);
   void wordSelected(void);
+  void onCustomMenuRequested(const QPoint &);
 
 private:
   Ui::MainWindow *ui;
