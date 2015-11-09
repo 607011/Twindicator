@@ -26,6 +26,9 @@ DEFINES += \
   MY_CLIENT_KEY=\\\"$${MY_CLIENT_KEY}\\\" \
   MY_CLIENT_SECRET=\\\"$${MY_CLIENT_SECRET}\\\"
 
+CONFIG += c++11
+
+unix:QMAKE_CXXFLAGS += -std=c++11
 include(../o2/src/src.pri)
 
 INCLUDEPATH += 3rdparty/oauth
