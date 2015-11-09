@@ -92,26 +92,14 @@ public:
     : oauth(new O1Twitter(parent))
     , store(new O2SettingsStore(O2_ENCRYPTION_KEY))
     , settings(QSettings::IniFormat, QSettings::UserScope, AppCompanyName, AppName)
-    , reply(Q_NULLPTR)
     , NAM(parent)
+    , reply(Q_NULLPTR)
+    , tableBuildCalled(false)
+    , tweetFilepath(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
+    , mostRecentId(0)
     , mouseDown(false)
     , tweetFrameOpacityEffect(Q_NULLPTR)
     , mouseMoveTimerId(0)
-    , tableBuildCalled(false)
-      /*
-       * From the Qt docs: "QStandardPaths::DataLocation returns the
-       * same value as AppLocalDataLocation. This enumeration value
-       * is deprecated. Using AppDataLocation is preferable since on
-       * Windows, the roaming path is recommended."
-       *
-       * AppLocalDataLocation was introduced in Qt 5.4. To maintain
-       * compatibility to Qt 5.3 (which is found in many reasonably
-       * current Linux distributions this code still uses the
-       * deprecated value DataLocation.
-       *
-       */
-    , tweetFilepath(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
-    , mostRecentId(0)
   {
     store->setGroupKey("twitter");
     oauth->setStore(store);
@@ -140,6 +128,7 @@ public:
   QSettings settings;
   QNetworkAccessManager NAM;
   QNetworkReply *reply;
+  bool tableBuildCalled;
   QString tweetFilepath;
   QString tweetFilename;
   QString badTweetFilename;
@@ -161,7 +150,6 @@ public:
   QPropertyAnimation unfloatAnimation;
   QPropertyAnimation floatInAnimation;
   QPropertyAnimation floatOutAnimation;
-  bool tableBuildCalled;
   QStringList relevantWords;
   QMenu *tableContextMenu;
 };
