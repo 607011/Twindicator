@@ -69,6 +69,8 @@ private slots:
   void buildTable(void);
   void wordSelected(void);
   void onCustomMenuRequested(const QPoint &);
+  void onDeleteTweet(void);
+  void onEvaluateTweet(void);
 
 private:
   Ui::MainWindow *ui;

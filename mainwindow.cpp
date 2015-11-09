@@ -548,6 +548,17 @@ void MainWindow::onCustomMenuRequested(const QPoint &pos)
 {
   Q_D(MainWindow);
   d->tableContextMenu->popup(ui->tableWidget->viewport()->mapToGlobal(pos));
+
+
+void MainWindow::onDeleteTweet(void)
+{
+  qDebug() << "MainWindow::onDeleteTweet()";
+}
+
+
+void MainWindow::onEvaluateTweet(void)
+{
+  qDebug() << "MainWindow::onDeleteTweet()";
 }
 
 
