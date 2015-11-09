@@ -163,6 +163,7 @@ public:
   QPropertyAnimation floatOutAnimation;
   bool tableBuildCalled;
   QStringList relevantWords;
+  QMenu *tableContextMenu;
 };
 
 
@@ -238,6 +239,9 @@ MainWindow::MainWindow(QWidget *parent)
   ui->tableWidget->verticalHeader()->hide();
   ui->tableWidget->setContextMenuPolicy(Qt::CustomContextMenu);
   QObject::connect(ui->tableWidget, SIGNAL(customContextMenuRequested(QPoint)), SLOT(onCustomMenuRequested(QPoint)));
+  d->tableContextMenu = new QMenu(ui->tableWidget);
+  d->tableContextMenu->addAction(tr("Delete"), this, SLOT(onDeleteTweet()));
+  d->tableContextMenu->addAction(tr("Evaluate"), this, SLOT(onEvaluateTweet()));
 
   restoreSettings();
 
