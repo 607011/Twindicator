@@ -29,6 +29,13 @@ DEFINES += \
 CONFIG += c++11
 
 unix:QMAKE_CXXFLAGS += -std=c++11
+
+macx {
+  LIBS += -L/usr/local/opt/openssl/lib -lssl
+  INCLUDEPATH += /usr/local/opt/openssl/include
+}
+
+
 include(../o2/src/src.pri)
 
 INCLUDEPATH += 3rdparty/oauth
