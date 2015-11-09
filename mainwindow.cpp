@@ -666,7 +666,6 @@ void MainWindow::getUserTimeline(void)
     reqParams << (d->mostRecentId > 0
                   ? O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1())
                   : O1RequestParameter("count", "200"));
-    reqParams << O1RequestParameter("trim_user", "true");
     QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
     d->reply = requestor->get(request, reqParams);
