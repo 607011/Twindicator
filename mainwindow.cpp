@@ -552,6 +552,9 @@ void MainWindow::onCustomMenuRequested(const QPoint &pos)
 {
   Q_D(MainWindow);
   d->tableContextMenu->popup(ui->tableWidget->viewport()->mapToGlobal(pos));
+  int row = ui->tableWidget->verticalHeader()->logicalIndexAt(pos);
+  ui->tableWidget->selectRow(row);
+}
 
 
 void MainWindow::onDeleteTweet(void)
