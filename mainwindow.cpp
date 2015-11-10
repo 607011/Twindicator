@@ -41,6 +41,8 @@
 #include <QLabel>
 #include <QRegExp>
 #include <QNetworkDiskCache>
+#include <QSettings>
+#include <QPixmapCache>
 #include <qmath.h>
 
 #include "globals.h"
@@ -84,7 +86,12 @@ static const int MaxKineticDataSamples = 5;
 static const qreal Friction = 0.95;
 static const int TimeInterval = 25;
 static const int AnimationDuration = 200;
-
+enum ColumnIndexes {
+  ColumnProfileImage = 0,
+  ColumnText,
+  ColumnCreatedAt,
+  ColumnId
+};
 
 class MainWindowPrivate
 {
@@ -248,7 +255,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   d->oauth->link();
 
-  QTimer::singleShot(10, this, SLOT(buildTable()));
+  QTimer::singleShot(100, this, SLOT(buildTable()));
 
   new QShortcut(QKeySequence(QKeySequence::MoveToNextChar), this, SLOT(like()));
   new QShortcut(QKeySequence(QKeySequence::MoveToPreviousChar), this, SLOT(dislike()));
@@ -586,29 +593,47 @@ void MainWindow::dislikeDirect(void)
 }
 
 
+void clearLayout(QLayout *layout) {
+  if (layout != Q_NULLPTR) {
+    QLayoutItem *item;
+    while ((item = layout->takeAt(0)) != Q_NULLPTR) {
+      if (item->layout() != Q_NULLPTR) {
+        clearLayout(item->layout());
+        delete item->layout();
+      }
+      if (item->widget() != Q_NULLPTR) {
+        delete item->widget();
+      }
+      if (item->spacerItem() != Q_NULLPTR) {
+        delete item->spacerItem();
+      }
+    }
+  }
+}
+
+
 void MainWindow::pickNextTweet(void)
 {
   Q_D(MainWindow);
   stopMotion();
   if (ui->tableWidget->columnCount() > 0 && ui->tableWidget->rowCount() > 0) {
-    QLayoutItem *item;
-    if (ui->tweetFrame->layout()) {
-      while ((item = ui->tweetFrame->layout()->takeAt(0)) != Q_NULLPTR) {
-        delete item->widget();
-        delete item;
-      }
-      delete ui->tweetFrame->layout();
-    }
+    clearLayout(ui->tweetFrameLayout->layout());
     d->currentTweet = d->storedTweets.first();
     d->storedTweets.pop_front();
     calculateMostRecentId();
     static const QRegExp delim("\\s", Qt::CaseSensitive, QRegExp::RegExp2);
 //    static const QRegExp reUrl("^(https?:\\/\\/)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([\\/\\w \\.-]*)*\\/?$", Qt::CaseInsensitive, QRegExp::RegExp2);
-    const QStringList &words = ui->tableWidget->item(0, 1)->text().split(delim);
+    QVariantMap tweet = d->currentTweet.toVariant().toMap();
+    const QStringList &words = tweet["text"].toString().split(delim);
+    QPixmap pix;
+    if (QPixmapCache::find(tweet["user"].toMap()["profile_image_url"].toString(), &pix)) {
+      ui->profileImageLabel->setPixmap(pix);
+    }
+    ui->profileImageLabel->setToolTip(QString("@%1").arg(tweet["user"].toMap()["name"].toString()));
     FlowLayout *flowLayout = new FlowLayout(2, 2, 2);
     foreach (QString word, words) {
       QPushButton *widget = new QPushButton;
-      widget->setStyleSheet("border: 1px solid #444; background-color: #ffdab9; padding: 1px 2px; font-size: 11pt");
+      widget->setStyleSheet("border: 1px solid #444; background-color: #ffdab9; padding: 1px 2px; font-size: 12pt");
       widget->setText(word);
       widget->setCursor(Qt::PointingHandCursor);
       QObject::connect(widget, SIGNAL(clicked(bool)), SLOT(wordSelected()));
@@ -619,7 +644,7 @@ void MainWindow::pickNextTweet(void)
     d->floatInAnimation.setEndValue(d->originalTweetFramePos);
     d->floatInAnimation.start();
     d->tweetFrameOpacityEffect->setOpacity(1.0);
-    ui->tweetFrame->setLayout(flowLayout);
+    ui->tweetFrameLayout->addLayout(flowLayout);
   }
 }
 
@@ -648,16 +673,27 @@ void MainWindow::buildTable(const QJsonArray &mostRecentTweets)
   foreach(QJsonValue p, d->storedTweets) {
     const QVariantMap &post = p.toVariant().toMap();
     const QUrl &imageUrl = QUrl(post["user"].toMap()["profile_image_url"].toString());
-    ui->tableWidget->setItem(row, 1, new QTableWidgetItem(post["text"].toString()));
-    ui->tableWidget->setItem(row, 2, new QTableWidgetItem(post["created_at"].toString()));
-    ui->tableWidget->setItem(row, 3, new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong())));
     QTableWidgetItem *imgItem = new QTableWidgetItem;
     imgItem->setData(Qt::UserRole, imageUrl);
+    QPixmap pix;
+    if (QPixmapCache::find(imageUrl.toString(), &pix)) {
+      imgItem->setData(Qt::DecorationRole, pix);
+    }
+    else {
+      loadImage(imageUrl);
+    }
     ui->tableWidget->setItem(row, 0, imgItem);
-    loadImage(imageUrl);
+    QTableWidgetItem *textItem = new QTableWidgetItem(post["text"].toString());
+    textItem->setTextAlignment(Qt::AlignTop | Qt::AlignLeft);
+    ui->tableWidget->setItem(row, 1, textItem);
+    QTableWidgetItem *createdAtItem = new QTableWidgetItem(post["created_at"].toString());
+    createdAtItem->setTextAlignment(Qt::AlignTop | Qt::AlignLeft);
+    ui->tableWidget->setItem(row, 2, createdAtItem);
+    QTableWidgetItem *idItem = new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong()));
+    ui->tableWidget->setItem(row, 3, idItem);
+    idItem->setTextAlignment(Qt::AlignTop | Qt::AlignLeft);
     ++row;
   }
-  ui->tableWidget->resizeColumnToContents(1);
   pickNextTweet();
 }
 
@@ -716,23 +752,30 @@ void MainWindow::gotImage(QNetworkReply *reply)
   const QUrl &url = reply->request().url();
   QPixmap pix;
   pix.loadFromData(reply->readAll());
+  QPixmapCache::insert(url.toString(), pix);
+  ui->tableWidget->resizeColumnToContents(0);
   for (int row = 0; row < ui->tableWidget->rowCount(); ++row) {
     QTableWidgetItem *item = ui->tableWidget->item(row, 0);
     if (url == item->data(Qt::UserRole).toUrl()) {
       item->setData(Qt::DecorationRole, pix);
       ui->tableWidget->setRowHeight(row, 48);
+      if (row == 0) {
+        ui->profileImageLabel->setPixmap(pix);
+      }
     }
   }
-  ui->tableWidget->resizeColumnToContents(0);
 }
 
 
 void MainWindow::loadImage(const QUrl &url)
 {
   Q_D(MainWindow);
-  QNetworkRequest request(url);
-  request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
-  d->imageNAM.get(request);
+  QPixmap pix;
+  if (!QPixmapCache::find(url.toString(), &pix)) {
+    QNetworkRequest request(url);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
+    d->imageNAM.get(request);
+  }
 }
 
 
@@ -779,6 +822,9 @@ void MainWindow::saveSettings(void)
   Q_D(MainWindow);
   d->settings.setValue("mainwindow/geometry", saveGeometry());
   d->settings.setValue("mainwindow/state", saveState());
+  for (int c = 0; c < ui->tableWidget->columnCount(); ++c) {
+    d->settings.setValue(QString("table/column/%1/width").arg(c), ui->tableWidget->columnWidth(c));
+  }
   d->settings.sync();
 }
 
@@ -788,4 +834,7 @@ void MainWindow::restoreSettings(void)
   Q_D(MainWindow);
   restoreGeometry(d->settings.value("mainwindow/geometry").toByteArray());
   restoreState(d->settings.value("mainwindow/state").toByteArray());
+  for (int c = 0; c < ui->tableWidget->columnCount(); ++c) {
+    ui->tableWidget->setColumnWidth(c, d->settings.value(QString("table/column/%1/width").arg(c)).toInt());
+  }
 }
