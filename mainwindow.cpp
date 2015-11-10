@@ -40,6 +40,7 @@
 #include <QShortcut>
 #include <QLabel>
 #include <QRegExp>
+#include <QNetworkDiskCache>
 #include <qmath.h>
 
 #include "globals.h"
@@ -92,7 +93,8 @@ public:
     : oauth(new O1Twitter(parent))
     , store(new O2SettingsStore(O2_ENCRYPTION_KEY))
     , settings(QSettings::IniFormat, QSettings::UserScope, AppCompanyName, AppName)
-    , NAM(parent)
+    , tweetNAM(parent)
+    , imageNAM(parent)
     , reply(Q_NULLPTR)
     , tableBuildCalled(false)
     , tweetFilepath(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
@@ -100,6 +102,7 @@ public:
     , mouseDown(false)
     , tweetFrameOpacityEffect(Q_NULLPTR)
     , mouseMoveTimerId(0)
+    , imageCache(new QNetworkDiskCache(parent))
   {
     store->setGroupKey("twitter");
     oauth->setStore(store);
@@ -116,6 +119,8 @@ public:
     unfloatAnimation.setPropertyName("pos");
     unfloatAnimation.setDuration(AnimationDuration);
     unfloatAnimation.setEasingCurve(QEasingCurve::InOutQuad);
+    imageCache->setCacheDirectory(QStandardPaths::writableLocation(QStandardPaths::DataLocation));
+    imageNAM.setCache(imageCache);
   }
   ~MainWindowPrivate()
   {
@@ -126,7 +131,8 @@ public:
   O1Twitter *oauth;
   O2SettingsStore *store;
   QSettings settings;
-  QNetworkAccessManager NAM;
+  QNetworkAccessManager tweetNAM;
+  QNetworkAccessManager imageNAM;
   QNetworkReply *reply;
   bool tableBuildCalled;
   QString tweetFilepath;
@@ -152,6 +158,7 @@ public:
   QPropertyAnimation floatOutAnimation;
   QStringList relevantWords;
   QMenu *tableContextMenu;
+  QNetworkDiskCache *imageCache;
 };
 
 
@@ -163,6 +170,8 @@ MainWindow::MainWindow(QWidget *parent)
 {
   Q_D(MainWindow);
   ui->setupUi(this);
+
+  qDebug() << d->tweetFilepath;
 
   d->tweetFilename = d->tweetFilepath + "/all_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
   d->badTweetFilename = d->tweetFilepath + "/bad_tweets_of_" + d->settings.value("twitter/userId").toString() + ".json";
@@ -222,14 +231,18 @@ MainWindow::MainWindow(QWidget *parent)
   ui->likeButton->stackUnder(ui->tweetFrame);
   ui->dislikeButton->stackUnder(ui->tweetFrame);
 
-  QObject::connect(&d->NAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotUserTimeline(QNetworkReply*)));
+  QObject::connect(&d->tweetNAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotUserTimeline(QNetworkReply*)));
+  QObject::connect(&d->imageNAM, SIGNAL(finished(QNetworkReply*)), this, SLOT(gotImage(QNetworkReply*)));
 
   ui->tableWidget->verticalHeader()->hide();
   ui->tableWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+  ui->tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
   QObject::connect(ui->tableWidget, SIGNAL(customContextMenuRequested(QPoint)), SLOT(onCustomMenuRequested(QPoint)));
   d->tableContextMenu = new QMenu(ui->tableWidget);
   d->tableContextMenu->addAction(tr("Delete"), this, SLOT(onDeleteTweet()));
   d->tableContextMenu->addAction(tr("Evaluate"), this, SLOT(onEvaluateTweet()));
+  d->tableContextMenu->addAction(tr("Like"), this, SLOT(likeDirect()));
+  d->tableContextMenu->addAction(tr("Dislike"), this, SLOT(dislikeDirect()));
 
   restoreSettings();
 
@@ -280,8 +293,9 @@ void MainWindow::closeEvent(QCloseEvent*)
   QFile wordFile(d->wordListFilename);
   wordFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
   qSort(d->relevantWords.begin(), d->relevantWords.end(), wordComparator);
-  foreach (QString word, d->relevantWords)
+  foreach (QString word, d->relevantWords) {
     wordFile.write(word.toUtf8() + "\n");
+  }
   wordFile.close();
 }
 
@@ -540,20 +554,35 @@ void MainWindow::onCustomMenuRequested(const QPoint &pos)
 {
   Q_D(MainWindow);
   d->tableContextMenu->popup(ui->tableWidget->viewport()->mapToGlobal(pos));
-  int row = ui->tableWidget->verticalHeader()->logicalIndexAt(pos);
-  ui->tableWidget->selectRow(row);
 }
 
 
 void MainWindow::onDeleteTweet(void)
 {
-  qDebug() << "MainWindow::onDeleteTweet()";
+  QItemSelectionModel *select = ui->tableWidget->selectionModel();
+  if (select->hasSelection()) {
+    const QModelIndexList &idxs = select->selectedRows();
+    foreach (QModelIndex idx, idxs) {
+      ui->tableWidget->removeRow(idx.row());
+    }
+  }
+  ui->tableWidget->clearSelection();
 }
 
 
 void MainWindow::onEvaluateTweet(void)
 {
-  qDebug() << "MainWindow::onDeleteTweet()";
+  qDebug() << "MainWindow::onEvaluateTweet()";
+}
+
+
+void MainWindow::likeDirect(void)
+{
+}
+
+
+void MainWindow::dislikeDirect(void)
+{
 }
 
 
@@ -575,7 +604,7 @@ void MainWindow::pickNextTweet(void)
     calculateMostRecentId();
     static const QRegExp delim("\\s", Qt::CaseSensitive, QRegExp::RegExp2);
 //    static const QRegExp reUrl("^(https?:\\/\\/)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([\\/\\w \\.-]*)*\\/?$", Qt::CaseInsensitive, QRegExp::RegExp2);
-    const QStringList &words = ui->tableWidget->itemAt(0, 0)->text().split(delim);
+    const QStringList &words = ui->tableWidget->item(0, 1)->text().split(delim);
     FlowLayout *flowLayout = new FlowLayout(2, 2, 2);
     foreach (QString word, words) {
       QPushButton *widget = new QPushButton;
@@ -618,12 +647,17 @@ void MainWindow::buildTable(const QJsonArray &mostRecentTweets)
   int row = 0;
   foreach(QJsonValue p, d->storedTweets) {
     const QVariantMap &post = p.toVariant().toMap();
-    ui->tableWidget->setItem(row, 0, new QTableWidgetItem(post["text"].toString()));
-    ui->tableWidget->setItem(row, 1, new QTableWidgetItem(post["created_at"].toString()));
-    ui->tableWidget->setItem(row, 2, new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong())));
+    const QUrl &imageUrl = QUrl(post["user"].toMap()["profile_image_url"].toString());
+    ui->tableWidget->setItem(row, 1, new QTableWidgetItem(post["text"].toString()));
+    ui->tableWidget->setItem(row, 2, new QTableWidgetItem(post["created_at"].toString()));
+    ui->tableWidget->setItem(row, 3, new QTableWidgetItem(QString("%1").arg(post["id"].toLongLong())));
+    QTableWidgetItem *imgItem = new QTableWidgetItem;
+    imgItem->setData(Qt::UserRole, imageUrl);
+    ui->tableWidget->setItem(row, 0, imgItem);
+    loadImage(imageUrl);
     ++row;
   }
-  ui->tableWidget->resizeColumnToContents(0);
+  ui->tableWidget->resizeColumnToContents(1);
   pickNextTweet();
 }
 
@@ -642,8 +676,9 @@ void MainWindow::gotUserTimeline(QNetworkReply *reply)
     const QJsonDocument &msg = QJsonDocument::fromJson(reply->readAll());
     const QList<QVariant> &errors = msg.toVariant().toMap()["errors"].toList();
     QString errMsg;
-    foreach (QVariant e, errors)
+    foreach (QVariant e, errors) {
       errMsg += QString("%1 (code: %2)\n").arg(e.toMap()["message"].toString()).arg(e.toMap()["code"].toInt());
+    }
     QMessageBox::warning(this, tr("Error"), errMsg);
   }
   else {
@@ -661,7 +696,7 @@ void MainWindow::getUserTimeline(void)
 {
   Q_D(MainWindow);
   if (d->oauth->linked()) {
-    O1Requestor *requestor = new O1Requestor(&d->NAM, d->oauth, this);
+    O1Requestor *requestor = new O1Requestor(&d->tweetNAM, d->oauth, this);
     QList<O1RequestParameter> reqParams;
     reqParams << (d->mostRecentId > 0
                   ? O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1())
@@ -673,6 +708,31 @@ void MainWindow::getUserTimeline(void)
   else {
     ui->statusBar->showMessage(tr("Application is not linked to Twitter."));
   }
+}
+
+
+void MainWindow::gotImage(QNetworkReply *reply)
+{
+  const QUrl &url = reply->request().url();
+  QPixmap pix;
+  pix.loadFromData(reply->readAll());
+  for (int row = 0; row < ui->tableWidget->rowCount(); ++row) {
+    QTableWidgetItem *item = ui->tableWidget->item(row, 0);
+    if (url == item->data(Qt::UserRole).toUrl()) {
+      item->setData(Qt::DecorationRole, pix);
+      ui->tableWidget->setRowHeight(row, 48);
+    }
+  }
+  ui->tableWidget->resizeColumnToContents(0);
+}
+
+
+void MainWindow::loadImage(const QUrl &url)
+{
+  Q_D(MainWindow);
+  QNetworkRequest request(url);
+  request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
+  d->imageNAM.get(request);
 }
 
 

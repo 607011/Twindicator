@@ -62,10 +62,13 @@ private slots:
   void onCloseBrowser(void);
   void getUserTimeline(void);
   void gotUserTimeline(QNetworkReply*);
+  void gotImage(QNetworkReply*);
   void onLogout(void);
   void onLogin(void);
   void like(void);
   void dislike(void);
+  void likeDirect(void);
+  void dislikeDirect(void);
   void buildTable(void);
   void wordSelected(void);
   void onCustomMenuRequested(const QPoint &);
@@ -93,6 +96,7 @@ private: // methods
   void unfloatTweet(void);
   void buildTable(const QJsonArray &mostRecentTweets);
   void calculateMostRecentId(void);
+  void loadImage(const QUrl &url);
 };
 
 #endif // __MAINWINDOW_H_
