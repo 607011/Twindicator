@@ -248,17 +248,12 @@ MainWindow::MainWindow(QWidget *parent)
   d->tableContextMenu = new QMenu(ui->tableWidget);
   d->tableContextMenu->addAction(tr("Delete"), this, SLOT(onDeleteTweet()));
   d->tableContextMenu->addAction(tr("Evaluate"), this, SLOT(onEvaluateTweet()));
-  d->tableContextMenu->addAction(tr("Like"), this, SLOT(likeDirect()));
-  d->tableContextMenu->addAction(tr("Dislike"), this, SLOT(dislikeDirect()));
 
   restoreSettings();
 
   d->oauth->link();
 
   QTimer::singleShot(100, this, SLOT(buildTable()));
-
-  new QShortcut(QKeySequence(QKeySequence::MoveToNextChar), this, SLOT(like()));
-  new QShortcut(QKeySequence(QKeySequence::MoveToPreviousChar), this, SLOT(dislike()));
 }
 
 
@@ -580,16 +575,6 @@ void MainWindow::onDeleteTweet(void)
 void MainWindow::onEvaluateTweet(void)
 {
   qDebug() << "MainWindow::onEvaluateTweet()";
-}
-
-
-void MainWindow::likeDirect(void)
-{
-}
-
-
-void MainWindow::dislikeDirect(void)
-{
 }
 
 

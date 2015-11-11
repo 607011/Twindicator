@@ -67,8 +67,6 @@ private slots:
   void onLogin(void);
   void like(void);
   void dislike(void);
-  void likeDirect(void);
-  void dislikeDirect(void);
   void buildTable(void);
   void wordSelected(void);
   void onCustomMenuRequested(const QPoint &);
