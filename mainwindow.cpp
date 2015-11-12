@@ -226,7 +226,7 @@ MainWindow::MainWindow(QWidget *parent)
   QObject::connect(ui->likeButton, SIGNAL(clicked(bool)), SLOT(like()));
   QObject::connect(ui->dislikeButton, SIGNAL(clicked(bool)), SLOT(dislike()));
   QObject::connect(ui->actionExit, SIGNAL(triggered(bool)), SLOT(close()));
-  QObject::connect(ui->actionRefresh, SIGNAL(triggered(bool)), SLOT(getUserTimeline()));
+  QObject::connect(ui->actionRefresh, SIGNAL(triggered(bool)), SLOT(onRefresh()));
   ui->tweetFrame->installEventFilter(this);
   d->tweetFrameOpacityEffect = new QGraphicsOpacityEffect(ui->tweetFrame);
   d->tweetFrameOpacityEffect->setOpacity(1.0);
@@ -518,19 +518,21 @@ QJsonArray MainWindow::mergeTweets(const QJsonArray &storedJson, const QJsonArra
 void MainWindow::calculateMostRecentId(void)
 {
   Q_D(MainWindow);
+  qlonglong lastMostRecentId = d->mostRecentId;
   d->mostRecentId = d->currentTweet.toVariant().toMap()["id"].toLongLong();
   if (!d->storedTweets.isEmpty()) {
     qlonglong id = d->storedTweets.first().toVariant().toMap()["id"].toLongLong();
     d->mostRecentId = qMax(id, d->mostRecentId);
   }
   if (!d->badTweets.isEmpty()) {
-    qlonglong id = d->badTweets.last().toVariant().toMap()["id"].toLongLong();
+    qlonglong id = d->badTweets.first().toVariant().toMap()["id"].toLongLong();
     d->mostRecentId = qMax(id, d->mostRecentId);
   }
   if (!d->goodTweets.isEmpty()) {
-    qlonglong id = d->goodTweets.last().toVariant().toMap()["id"].toLongLong();
+    qlonglong id = d->goodTweets.first().toVariant().toMap()["id"].toLongLong();
     d->mostRecentId = qMax(id, d->mostRecentId);
   }
+  qDebug() << d->mostRecentId << lastMostRecentId << (lastMostRecentId <= d->mostRecentId);
 }
 
 
@@ -716,15 +718,22 @@ void MainWindow::gotUserTimeline(QNetworkReply *reply)
 void MainWindow::getUserTimeline(void)
 {
   Q_D(MainWindow);
+  O1Requestor *requestor = new O1Requestor(&d->tweetNAM, d->oauth, this);
+  QList<O1RequestParameter> reqParams;
+  reqParams << (d->mostRecentId > 0
+                ? O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1())
+                : O1RequestParameter("count", "200"));
+  QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
+  request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
+  d->reply = requestor->get(request, reqParams);
+}
+
+
+void MainWindow::onRefresh(void)
+{
+  Q_D(MainWindow);
   if (d->oauth->linked()) {
-    O1Requestor *requestor = new O1Requestor(&d->tweetNAM, d->oauth, this);
-    QList<O1RequestParameter> reqParams;
-    reqParams << (d->mostRecentId > 0
-                  ? O1RequestParameter("since_id", QString::number(d->mostRecentId).toLatin1())
-                  : O1RequestParameter("count", "200"));
-    QNetworkRequest request(QUrl("https://api.twitter.com/1.1/statuses/home_timeline.json"));
-    request.setHeader(QNetworkRequest::ContentTypeHeader, O2_MIME_TYPE_XFORM);
-    d->reply = requestor->get(request, reqParams);
+    getUserTimeline();
   }
   else {
     ui->statusBar->showMessage(tr("Application is not linked to Twitter."));
@@ -744,9 +753,6 @@ void MainWindow::gotImage(QNetworkReply *reply)
     if (url == item->data(Qt::UserRole).toUrl()) {
       item->setData(Qt::DecorationRole, pix);
       ui->tableWidget->setRowHeight(row, 48);
-      if (row == 0) {
-        ui->profileImageLabel->setPixmap(pix);
-      }
     }
   }
 }

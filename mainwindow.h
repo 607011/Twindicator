@@ -60,6 +60,7 @@ private slots:
   void onLinkingSucceeded(void);
   void onOpenBrowser(const QUrl &url);
   void onCloseBrowser(void);
+  void onRefresh(void);
   void getUserTimeline(void);
   void gotUserTimeline(QNetworkReply*);
   void gotImage(QNetworkReply*);
